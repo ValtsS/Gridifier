@@ -28,6 +28,7 @@ var stationChannel = Channel.CreateBounded<Station>(new BoundedChannelOptions(10
 builder.Services.AddSingleton(dbFactory);
 builder.Services.AddSingleton<StationRepository>();
 builder.Services.AddSingleton<StationCache>();
+builder.Services.AddSingleton<AppStats>();
 builder.Services.AddSingleton(mqttSettings);
 builder.Services.AddSingleton(stationChannel);
 builder.Services.AddHostedService<PskReporterWorker>();

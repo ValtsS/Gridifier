@@ -8,7 +8,8 @@ public class DatabaseWriter(
     ILogger<DatabaseWriter> logger,
     Channel<Station> stationChannel,
     StationRepository repo,
-    StationCache cache)
+    StationCache cache,
+    AppStats stats)
     : BackgroundService
 {
     private const int BatchSize = 100;
@@ -65,6 +66,12 @@ public class DatabaseWriter(
                     logger.LogInformation(
                         "Stats: {Written} written, {Skipped} deduped ({Rate:F0} writes/s), cache {Cache}",
                         totalWritten, totalSkipped, rate, cache.Count);
+
+                    stats.TotalWritten = totalWritten;
+                    stats.TotalSkipped = totalSkipped;
+                    stats.CacheSize = cache.Count;
+                    stats.MessagesPerSecond = rate;
+                    stats.DatabaseCount = repo.Count();
                     lastStatsTime = DateTime.UtcNow;
                     lastStatsWritten = totalWritten;
                     lastStatsSkipped = totalSkipped;

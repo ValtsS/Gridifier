@@ -7,64 +7,96 @@ namespace Gridifier.Worker;
 public class PskReporterWorker(
     ILogger<PskReporterWorker> logger,
     Channel<Station> stationChannel,
-    MqttSettings settings)
+    MqttSettings settings,
+    AppStats stats)
     : BackgroundService
 {
+    private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan KeepaliveLog = TimeSpan.FromMinutes(5);
+    private readonly MqttClientOptions _connOptions = new MqttClientOptionsBuilder()
+        .WithTcpServer(settings.Host, settings.Port)
+        .Build();
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Connecting to {Host}:{Port}, subscribing to {Topic}",
-            settings.Host, settings.Port, settings.Topic);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await RunSession(stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "MQTT session crashed, reconnecting in {Delay}s", ReconnectDelay.TotalSeconds);
+            }
 
+            if (!stoppingToken.IsCancellationRequested)
+                await Task.Delay(ReconnectDelay, stoppingToken);
+        }
+    }
+
+    private async Task RunSession(CancellationToken stoppingToken)
+    {
         var factory = new MqttClientFactory();
         using var client = factory.CreateMqttClient();
 
-        var connOptions = new MqttClientOptionsBuilder()
-            .WithTcpServer(settings.Host, settings.Port)
+        client.DisconnectedAsync += async args =>
+        {
+            stats.MqttConnected = false;
+            logger.LogWarning("Disconnected (reason: {Reason}), will reconnect", args.Reason);
+            await Task.CompletedTask;
+        };
+
+        logger.LogInformation("Connecting to {Host}:{Port}", settings.Host, settings.Port);
+        await client.ConnectAsync(_connOptions, stoppingToken);
+        stats.MqttConnected = true;
+        logger.LogInformation("Connected");
+
+        var subscribeOptions = new MqttClientSubscribeOptionsBuilder()
+            .WithTopicFilter(settings.Topic)
             .Build();
 
-        try
+        await client.SubscribeAsync(subscribeOptions, stoppingToken);
+        logger.LogInformation("Subscribed to {Topic}", settings.Topic);
+
+        var handler = new PskMessageHandler(stationChannel);
+        var lastKeepalive = DateTime.UtcNow;
+
+        client.ApplicationMessageReceivedAsync += args =>
         {
-            await client.ConnectAsync(connOptions, stoppingToken);
-            logger.LogInformation("Connected");
-
-            var subscribeOptions = new MqttClientSubscribeOptionsBuilder()
-                .WithTopicFilter(settings.Topic)
-                .Build();
-
-            await client.SubscribeAsync(subscribeOptions, stoppingToken);
-            logger.LogInformation("Subscribed to {Topic}", settings.Topic);
-
-            var handler = new PskMessageHandler(stationChannel);
-
-            client.ApplicationMessageReceivedAsync += args =>
+            try
             {
-                try
-                {
-                    var text = args.ApplicationMessage.ConvertPayloadToString();
-                    handler.HandleMessage(text);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Error processing message");
-                }
+                var text = args.ApplicationMessage.ConvertPayloadToString();
+                handler.HandleMessage(text);
+                stats.IncrementMessages();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error processing message");
+            }
 
-                return Task.CompletedTask;
-            };
+            return Task.CompletedTask;
+        };
 
-            await Task.Delay(Timeout.Infinite, stoppingToken);
-        }
-        catch (OperationCanceledException)
+        while (!stoppingToken.IsCancellationRequested)
         {
-            logger.LogInformation("Stopping");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Connection error");
-        }
-        finally
-        {
-            if (client.IsConnected)
-                await client.DisconnectAsync();
+            await Task.Delay(1000, stoppingToken);
+
+            if (DateTime.UtcNow - lastKeepalive >= KeepaliveLog)
+            {
+                logger.LogInformation("Still listening - received {Total} messages so far", stats.TotalMessagesReceived);
+                lastKeepalive = DateTime.UtcNow;
+            }
+
+            if (!client.IsConnected)
+            {
+                logger.LogWarning("MQTT client disconnected, exiting session to reconnect");
+                break;
+            }
         }
     }
 }

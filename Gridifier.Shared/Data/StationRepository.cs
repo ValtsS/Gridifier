@@ -86,4 +86,12 @@ public class StationRepository(DbConnectionFactory connectionFactory)
             };
         }
     }
+
+    public long Count()
+    {
+        using var conn = connectionFactory.CreateConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM stations";
+        return (long)cmd.ExecuteScalar()!;
+    }
 }
