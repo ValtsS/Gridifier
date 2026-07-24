@@ -44,7 +44,9 @@ public class PskMessageHandler(Channel<Station> stationChannel)
             : "";
 
         if (!GridValidator.IsValid(grid))
-            grid = "";
+            return;
+
+        grid = GridValidator.Shorten(grid);
 
         stationChannel.Writer.TryWrite(new Station { Callsign = callsign, Grid = grid });
     }

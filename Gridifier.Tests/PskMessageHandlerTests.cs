@@ -30,7 +30,7 @@ public class PskMessageHandlerTests
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
-        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20AA");
+        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20");
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public class PskMessageHandlerTests
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
-        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20AA");
+        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20");
     }
 
     [Fact]
@@ -51,19 +51,18 @@ public class PskMessageHandlerTests
 
         var stations = ReadAll();
         Assert.Equal(2, stations.Count);
-        Assert.Contains(stations, s => s.Callsign == "K4BYN" && s.Grid == "FM05QU");
-        Assert.Contains(stations, s => s.Callsign == "WT9Q" && s.Grid == "EN44GB");
+        Assert.Contains(stations, s => s.Callsign == "K4BYN" && s.Grid == "FM05");
+        Assert.Contains(stations, s => s.Callsign == "WT9Q" && s.Grid == "EN44");
     }
 
     [Fact]
-    public void HandleMessage_handles_missing_locator()
+    public void HandleMessage_skips_missing_locator()
     {
         var json = """{"rc":"DL1ABC","sc":"TEST"}""";
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
-        var station = stations.Single(s => s.Callsign == "DL1ABC");
-        Assert.Equal("", station.Grid);
+        Assert.DoesNotContain(stations, s => s.Callsign == "DL1ABC");
     }
 
     [Fact]
@@ -83,14 +82,23 @@ public class PskMessageHandlerTests
     }
 
     [Fact]
-    public void HandleMessage_rejects_invalid_grid()
+    public void HandleMessage_skips_invalid_grid()
     {
-        var json = """{"rc":"DL1ABC","rl":"ABCDEFGHIJKLMNOPQRSTUVWXYZ","sc":"TEST"}""";
+        var json = """{"rc":"DL1ABC","rl":"ZZ99AA","sc":"TEST"}""";
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
-        var station = stations.Single(s => s.Callsign == "DL1ABC");
-        Assert.Equal("", station.Grid);
+        Assert.DoesNotContain(stations, s => s.Callsign == "DL1ABC");
+    }
+
+    [Fact]
+    public void HandleMessage_truncates_grid_to_4_chars()
+    {
+        var json = """{"rc":"DL1ABC","rl":"JO20AA88","sc":"TEST"}""";
+        _handler.HandleMessage(json);
+
+        var stations = ReadAll();
+        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20");
     }
 
     [Fact]
@@ -111,8 +119,8 @@ public class PskMessageHandlerTests
 
         var stations = ReadAll();
         Assert.Equal(2, stations.Count);
-        Assert.Contains(stations, s => s.Callsign == "K4BYN" && s.Grid == "FM05QU");
-        Assert.Contains(stations, s => s.Callsign == "WT9Q" && s.Grid == "EN44GB");
+        Assert.Contains(stations, s => s.Callsign == "K4BYN" && s.Grid == "FM05");
+        Assert.Contains(stations, s => s.Callsign == "WT9Q" && s.Grid == "EN44");
     }
 
     [Fact]

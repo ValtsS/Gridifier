@@ -16,6 +16,9 @@ public class GridValidatorTests
     [InlineData("JO20AA11", true)]
     [InlineData("FN42hn88", true)]
     [InlineData("JO20AA99", true)]
+    [InlineData("JO20AA99AA", true)]
+    [InlineData("JO20AA99AB", true)]
+    [InlineData("JO20AA99ZZ", false)]
     [InlineData("", false)]
     [InlineData("   ", false)]
     [InlineData(null, false)]
@@ -43,6 +46,17 @@ public class GridValidatorTests
     public void Normalize_various_inputs(string? input, string expected)
     {
         var result = GridValidator.Normalize(input);
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [InlineData("JO20AA", "JO20")]
+    [InlineData("JO20AA99", "JO20")]
+    [InlineData("JO20", "JO20")]
+    [InlineData("FN42hn88", "FN42")]
+    public void Shorten_returns_first_4_chars(string input, string expected)
+    {
+        var result = GridValidator.Shorten(input);
         Assert.Equal(expected, result);
     }
 }
