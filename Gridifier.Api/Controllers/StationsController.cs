@@ -20,6 +20,6 @@ public class StationsController(StationRepository repo) : ControllerBase
         if (station is null)
             return NotFound();
 
-        return Ok(new { station.Grid, station.LastUpdate });
+        return Ok(new { Grid = GridValidator.Shorten(station.Grid), station.LastUpdate });
     }
 }
