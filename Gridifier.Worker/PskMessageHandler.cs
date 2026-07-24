@@ -1,11 +1,11 @@
 using System.Text.Json;
-using Gridifier.Shared.Data;
+using System.Threading.Channels;
 using Gridifier.Shared.Models;
 using Gridifier.Shared.Validation;
 
 namespace Gridifier.Worker;
 
-public class PskMessageHandler(StationRepository repo, ILogger logger)
+public class PskMessageHandler(Channel<Station> stationChannel)
 {
     public void HandleMessage(string payload)
     {
@@ -23,28 +23,29 @@ public class PskMessageHandler(StationRepository repo, ILogger logger)
         {
             var root = doc.RootElement;
 
-            if (root.TryGetProperty("rc", out var receiverEl))
-            {
-                var callsign = receiverEl.GetString();
-                var grid = root.TryGetProperty("rl", out var gridEl)
-                    ? gridEl.GetString() ?? ""
-                    : "";
+            if (root.TryGetProperty("rc", out var rcEl))
+                TryQueue(rcEl, root, "rl");
 
-                if (!string.IsNullOrWhiteSpace(callsign))
-                {
-                    callsign = CallsignValidator.Normalize(callsign);
-                    grid = GridValidator.Normalize(grid);
-
-                    if (grid.Length > 16)
-                        grid = grid[..16];
-
-                    if (!GridValidator.IsValid(grid))
-                        grid = "";
-
-                    repo.Upsert(new Station { Callsign = callsign, Grid = grid });
-                    logger.LogDebug("Upserted receiver {Callsign} with grid {Grid}", callsign, grid);
-                }
-            }
+            if (root.TryGetProperty("sc", out var scEl))
+                TryQueue(scEl, root, "sl");
         }
+    }
+
+    private void TryQueue(JsonElement callsignEl, JsonElement root, string gridKey)
+    {
+        var callsign = callsignEl.GetString();
+        if (string.IsNullOrWhiteSpace(callsign))
+            return;
+
+        callsign = CallsignValidator.Normalize(callsign);
+
+        var grid = root.TryGetProperty(gridKey, out var gridEl)
+            ? GridValidator.Normalize(gridEl.GetString() ?? "")
+            : "";
+
+        if (!GridValidator.IsValid(grid))
+            grid = "";
+
+        stationChannel.Writer.TryWrite(new Station { Callsign = callsign, Grid = grid });
     }
 }

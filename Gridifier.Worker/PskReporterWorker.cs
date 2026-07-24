@@ -1,4 +1,4 @@
-using Gridifier.Shared.Data;
+using System.Threading.Channels;
 using Gridifier.Shared.Models;
 using MQTTnet;
 
@@ -6,7 +6,7 @@ namespace Gridifier.Worker;
 
 public class PskReporterWorker(
     ILogger<PskReporterWorker> logger,
-    StationRepository repo,
+    Channel<Station> stationChannel,
     MqttSettings settings)
     : BackgroundService
 {
@@ -34,7 +34,7 @@ public class PskReporterWorker(
             await client.SubscribeAsync(subscribeOptions, stoppingToken);
             logger.LogInformation("Subscribed to {Topic}", settings.Topic);
 
-            var handler = new PskMessageHandler(repo, logger);
+            var handler = new PskMessageHandler(stationChannel);
 
             client.ApplicationMessageReceivedAsync += args =>
             {

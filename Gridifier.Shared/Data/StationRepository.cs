@@ -40,6 +40,35 @@ public class StationRepository(DbConnectionFactory connectionFactory)
         cmd.ExecuteNonQuery();
     }
 
+    public void UpsertMany(IReadOnlyList<Station> stations)
+    {
+        if (stations.Count == 0) return;
+
+        using var conn = connectionFactory.CreateConnection();
+        using var tx = conn.BeginTransaction();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO stations (callsign, grid, last_update)
+            VALUES (@callsign, @grid, datetime('now'))
+            ON CONFLICT(callsign) DO UPDATE SET
+                grid = @grid,
+                last_update = datetime('now');
+            """;
+
+        var callsignParam = cmd.Parameters.Add("@callsign", Microsoft.Data.Sqlite.SqliteType.Text);
+        var gridParam = cmd.Parameters.Add("@grid", Microsoft.Data.Sqlite.SqliteType.Text);
+
+        foreach (var station in stations)
+        {
+            callsignParam.Value = station.Callsign;
+            gridParam.Value = station.Grid;
+            cmd.ExecuteNonQuery();
+        }
+
+        tx.Commit();
+    }
+
     public IEnumerable<Station> GetAll()
     {
         using var conn = connectionFactory.CreateConnection();
