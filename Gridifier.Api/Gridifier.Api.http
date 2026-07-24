@@ -1,0 +1,6 @@
+@Gridifier.Api_HostAddress = http://localhost:5027
+
+GET {{Gridifier.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
