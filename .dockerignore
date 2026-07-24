@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+.editorconfig
+.git/
+.gitattributes
+.gitignore
+Gridifier.Api/
+Gridifier.Tests/
+*.md
