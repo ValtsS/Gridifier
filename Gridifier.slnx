@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="Gridifier.Api/Gridifier.Api.csproj" />
   <Project Path="Gridifier.Shared/Gridifier.Shared.csproj" />
+  <Project Path="Gridifier.Tests/Gridifier.Tests.csproj" />
   <Project Path="Gridifier.Worker/Gridifier.Worker.csproj" />
 </Solution>
