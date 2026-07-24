@@ -74,7 +74,7 @@ public class PskMessageHandlerTests : IDisposable
 
         var station = _repo.GetByCallsign("DL1ABC");
         Assert.NotNull(station);
-        Assert.Equal(16, station.Grid.Length);
+        Assert.Equal("", station.Grid);
     }
 
     [Fact]

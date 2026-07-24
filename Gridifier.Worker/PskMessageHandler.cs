@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Gridifier.Shared.Data;
 using Gridifier.Shared.Models;
+using Gridifier.Shared.Validation;
 
 namespace Gridifier.Worker;
 
@@ -31,9 +32,14 @@ public class PskMessageHandler(StationRepository repo, ILogger logger)
 
                 if (!string.IsNullOrWhiteSpace(callsign))
                 {
-                    callsign = callsign.Trim().ToUpperInvariant();
+                    callsign = CallsignValidator.Normalize(callsign);
+                    grid = GridValidator.Normalize(grid);
+
                     if (grid.Length > 16)
                         grid = grid[..16];
+
+                    if (!GridValidator.IsValid(grid))
+                        grid = "";
 
                     repo.Upsert(new Station { Callsign = callsign, Grid = grid });
                     logger.LogDebug("Upserted receiver {Callsign} with grid {Grid}", callsign, grid);
