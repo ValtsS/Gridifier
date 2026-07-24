@@ -4,7 +4,10 @@ using MQTTnet;
 
 namespace Gridifier.Worker;
 
-public class PskReporterWorker(ILogger<PskReporterWorker> logger, StationRepository repo, MqttSettings settings)
+public class PskReporterWorker(
+    ILogger<PskReporterWorker> logger,
+    StationRepository repo,
+    MqttSettings settings)
     : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -31,19 +34,21 @@ public class PskReporterWorker(ILogger<PskReporterWorker> logger, StationReposit
             await client.SubscribeAsync(subscribeOptions, stoppingToken);
             logger.LogInformation("Subscribed to {Topic}", settings.Topic);
 
-            client.ApplicationMessageReceivedAsync += async args =>
+            var handler = new PskMessageHandler(repo, logger);
+
+            client.ApplicationMessageReceivedAsync += args =>
             {
                 try
                 {
                     var text = args.ApplicationMessage.ConvertPayloadToString();
-                    logger.LogDebug("Received: {Payload}", text);
+                    handler.HandleMessage(text);
                 }
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Error processing message");
                 }
 
-                await Task.CompletedTask;
+                return Task.CompletedTask;
             };
 
             await Task.Delay(Timeout.Infinite, stoppingToken);
