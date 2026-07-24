@@ -8,7 +8,7 @@ namespace Gridifier.Api.Controllers;
 [Route("api/stations")]
 public class StationsController(StationRepository repo) : ControllerBase
 {
-    [HttpGet("{callsign}")]
+    [HttpGet("{*callsign}")]
     public IActionResult Get(string callsign)
     {
         var normalized = CallsignValidator.Normalize(callsign);
