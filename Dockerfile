@@ -6,15 +6,17 @@ COPY Gridifier.slnx ./
 
 COPY Gridifier.Shared/Gridifier.Shared.csproj Gridifier.Shared/
 COPY Gridifier.Worker/Gridifier.Worker.csproj Gridifier.Worker/
+COPY Gridifier.Api/Gridifier.Api.csproj Gridifier.Api/
 
-RUN dotnet restore Gridifier.Worker/Gridifier.Worker.csproj
+RUN dotnet restore Gridifier.Api/Gridifier.Api.csproj
 
 COPY Gridifier.Shared/ Gridifier.Shared/
 COPY Gridifier.Worker/ Gridifier.Worker/
+COPY Gridifier.Api/ Gridifier.Api/
 
-RUN dotnet publish Gridifier.Worker/Gridifier.Worker.csproj -c Release -o /app --no-restore
+RUN dotnet publish Gridifier.Api/Gridifier.Api.csproj -c Release -o /app --no-restore
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -26,4 +28,4 @@ COPY --from=build /app .
 VOLUME /data
 ENV ConnectionStrings__Gridifier="Data Source=/data/gridifier.db"
 
-ENTRYPOINT ["dotnet", "Gridifier.Worker.dll"]
+ENTRYPOINT ["dotnet", "Gridifier.Api.dll"]

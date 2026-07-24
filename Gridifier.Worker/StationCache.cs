@@ -11,6 +11,7 @@ public class StationCache
     private record Entry(string Grid, DateTime LastDbWrite);
 
     private readonly Dictionary<string, Entry> _cache = new(MaxSize);
+    private readonly PriorityQueue<string, DateTime> _evictionQueue = new();
     private int _flushCount;
 
     public int Count => _cache.Count;
@@ -28,7 +29,9 @@ public class StationCache
 
     public void MarkWritten(Station station)
     {
-        _cache[station.Callsign] = new Entry(station.Grid, DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+        _cache[station.Callsign] = new Entry(station.Grid, now);
+        _evictionQueue.Enqueue(station.Callsign, now);
     }
 
     public void MaybeEvict()
@@ -38,24 +41,25 @@ public class StationCache
         if (_flushCount % 50 != 0 || _cache.Count == 0)
             return;
 
-        var cutoff = DateTime.UtcNow - EntryTtl;
+        LazyEvict();
+    }
 
-        if (_cache.Count > MaxSize)
-        {
-            var toRemove = _cache
-                .OrderBy(x => x.Value.LastDbWrite)
-                .Take(_cache.Count - MaxSize)
-                .Select(x => x.Key)
-                .ToList();
+    private void LazyEvict()
+    {
+        var now = DateTime.UtcNow;
+        var cutoff = now - EntryTtl;
 
-            foreach (var key in toRemove)
-                _cache.Remove(key);
-        }
-        else
+        while (_evictionQueue.TryPeek(out var callsign, out var timestamp))
         {
-            var stale = _cache.Where(x => x.Value.LastDbWrite < cutoff).ToList();
-            foreach (var kv in stale)
-                _cache.Remove(kv.Key);
+            if (_cache.TryGetValue(callsign, out var entry) && entry.LastDbWrite == timestamp)
+            {
+                if (entry.LastDbWrite >= cutoff && _cache.Count <= MaxSize)
+                    break;
+
+                _cache.Remove(callsign);
+            }
+
+            _evictionQueue.Dequeue();
         }
     }
 }

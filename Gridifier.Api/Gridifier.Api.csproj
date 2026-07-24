@@ -8,6 +8,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Gridifier.Shared\Gridifier.Shared.csproj" />
+    <ProjectReference Include="..\Gridifier.Worker\Gridifier.Worker.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MQTTnet" Version="5.2.0.1603" />
   </ItemGroup>
 
 </Project>
