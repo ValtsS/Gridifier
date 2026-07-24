@@ -16,6 +16,20 @@ public class StationCache
 
     public int Count => _cache.Count;
 
+    public bool TryGet(string callsign, out string? grid, out DateTime? lastUpdate)
+    {
+        if (_cache.TryGetValue(callsign, out var entry))
+        {
+            grid = entry.Grid;
+            lastUpdate = entry.LastDbWrite;
+            return true;
+        }
+
+        grid = null;
+        lastUpdate = null;
+        return false;
+    }
+
     public bool ShouldSkip(Station station)
     {
         if (!_cache.TryGetValue(station.Callsign, out var entry))

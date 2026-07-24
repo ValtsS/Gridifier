@@ -71,6 +71,7 @@ public class DatabaseWriterTests : IDisposable
     private readonly string _dbPath;
     private readonly StationRepository _repo;
     private readonly Channel<Station> _channel;
+    private readonly StationCache _cache;
 
     public DatabaseWriterTests()
     {
@@ -84,6 +85,7 @@ public class DatabaseWriterTests : IDisposable
         {
             FullMode = BoundedChannelFullMode.DropOldest
         });
+        _cache = new StationCache();
     }
 
     public void Dispose()
@@ -95,7 +97,7 @@ public class DatabaseWriterTests : IDisposable
     [Fact]
     public async Task DatabaseWriter_flushes_on_batch_size()
     {
-        var writer = new DatabaseWriter(NullLogger<DatabaseWriter>.Instance, _channel, _repo);
+        var writer = new DatabaseWriter(NullLogger<DatabaseWriter>.Instance, _channel, _repo, _cache);
 
         _ = writer.StartAsync(CancellationToken.None);
 
@@ -115,7 +117,7 @@ public class DatabaseWriterTests : IDisposable
     [Fact]
     public async Task DatabaseWriter_flushes_on_interval()
     {
-        var writer = new DatabaseWriter(NullLogger<DatabaseWriter>.Instance, _channel, _repo);
+        var writer = new DatabaseWriter(NullLogger<DatabaseWriter>.Instance, _channel, _repo, _cache);
 
         _ = writer.StartAsync(CancellationToken.None);
 

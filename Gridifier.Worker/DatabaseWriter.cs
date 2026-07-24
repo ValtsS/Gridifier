@@ -7,7 +7,8 @@ namespace Gridifier.Worker;
 public class DatabaseWriter(
     ILogger<DatabaseWriter> logger,
     Channel<Station> stationChannel,
-    StationRepository repo)
+    StationRepository repo,
+    StationCache cache)
     : BackgroundService
 {
     private const int BatchSize = 100;
@@ -17,7 +18,6 @@ public class DatabaseWriter(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var batch = new List<Station>(BatchSize);
-        var cache = new StationCache();
         var totalWritten = 0L;
         var totalSkipped = 0L;
         var lastStatsTime = DateTime.UtcNow;
