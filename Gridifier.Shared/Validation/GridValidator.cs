@@ -4,7 +4,7 @@ namespace Gridifier.Shared.Validation;
 
 public static partial class GridValidator
 {
-    [GeneratedRegex(@"^[A-R]{2}[0-9]{2}([A-X]{2})?$", RegexOptions.Singleline)]
+    [GeneratedRegex(@"^[A-R]{2}[0-9]{2}([A-X]{2}([0-9]{2})?)?$", RegexOptions.Singleline)]
     private static partial Regex MaidenheadPattern();
 
     public static string Normalize(string? grid)
@@ -18,7 +18,7 @@ public static partial class GridValidator
     public static bool IsValid(string? grid)
     {
         var normalized = Normalize(grid);
-        return normalized.Length is 4 or 6
+        return normalized.Length is 4 or 6 or 8
             && MaidenheadPattern().IsMatch(normalized);
     }
 }

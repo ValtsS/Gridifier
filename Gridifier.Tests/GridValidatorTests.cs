@@ -13,6 +13,9 @@ public class GridValidatorTests
     [InlineData("jo20", true)]
     [InlineData("AA00AA", true)]
     [InlineData("RR99XX", true)]
+    [InlineData("JO20AA11", true)]
+    [InlineData("FN42hn88", true)]
+    [InlineData("JO20AA99", true)]
     [InlineData("", false)]
     [InlineData("   ", false)]
     [InlineData(null, false)]
@@ -22,6 +25,8 @@ public class GridValidatorTests
     [InlineData("JO20AAA", false)]
     [InlineData("JO20A1", false)]
     [InlineData("SJ20AA", false)]
+    [InlineData("JO20AA1", false)]
+    [InlineData("JO20AA111", false)]
     [InlineData("JO20AA ", true)]
     public void IsValid_various_inputs(string? input, bool expected)
     {
