@@ -94,6 +94,19 @@ docker run -v gridifier-data:/data -p 8080:80 gridifier
 dotnet publish Gridifier.Api -c Release -r win-x64 --self-contained -o C:\Deploy\Gridifier
 ```
 
+Copy the `C:\Deploy\Gridifier` folder to the target machine. Run with a custom port:
+
+```bash
+set ASPNETCORE_URLS=http://0.0.0.0:8080
+Gridifier.Api.exe
+```
+
+Or as a one-liner:
+
+```bash
+set ASPNETCORE_URLS=http://0.0.0.0:8080 && start /B Gridifier.Api.exe
+```
+
 ## Tests
 
 ```bash
