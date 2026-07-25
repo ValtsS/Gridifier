@@ -1,1 +1,0 @@
-dotnet publish Gridifier.Api -c Release -r win-x64 --self-contained -o q:\Store\Gridifier
