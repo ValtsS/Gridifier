@@ -13,8 +13,7 @@ public class DatabaseWriter(
     : BackgroundService
 {
     private const int BatchSize = 100;
-    private const int StatsInterval = 1000;
-    private static readonly TimeSpan StatsMinInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan StatsInterval = TimeSpan.FromMinutes(1);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -57,25 +56,22 @@ public class DatabaseWriter(
 
             cache.MaybeEvict();
 
-            if (totalWritten + totalSkipped - lastStatsWritten - lastStatsSkipped >= StatsInterval)
+            var elapsed = DateTime.UtcNow - lastStatsTime;
+            if (elapsed >= StatsInterval)
             {
-                var elapsed = DateTime.UtcNow - lastStatsTime;
-                if (elapsed >= StatsMinInterval)
-                {
-                    var rate = (totalWritten - lastStatsWritten) / elapsed.TotalSeconds;
-                    logger.LogInformation(
-                        "Stats: {Written} written, {Skipped} deduped ({Rate:F0} writes/s), cache {Cache}",
-                        totalWritten, totalSkipped, rate, cache.Count);
+                var rate = (totalWritten - lastStatsWritten) / elapsed.TotalSeconds;
+                logger.LogInformation(
+                    "Stats: {Written} written, {Skipped} deduped ({Rate:F0} writes/s), cache {Cache}",
+                    totalWritten, totalSkipped, rate, cache.Count);
 
-                    stats.TotalWritten = totalWritten;
-                    stats.TotalSkipped = totalSkipped;
-                    stats.CacheSize = cache.Count;
-                    stats.MessagesPerSecond = rate;
-                    stats.DatabaseCount = repo.Count();
-                    lastStatsTime = DateTime.UtcNow;
-                    lastStatsWritten = totalWritten;
-                    lastStatsSkipped = totalSkipped;
-                }
+                stats.TotalWritten = totalWritten;
+                stats.TotalSkipped = totalSkipped;
+                stats.CacheSize = cache.Count;
+                stats.MessagesPerSecond = rate;
+                stats.DatabaseCount = repo.Count();
+                lastStatsTime = DateTime.UtcNow;
+                lastStatsWritten = totalWritten;
+                lastStatsSkipped = totalSkipped;
             }
 
             if (batch.Count == 0)
