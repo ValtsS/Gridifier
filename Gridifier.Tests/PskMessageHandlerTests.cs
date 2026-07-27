@@ -26,39 +26,39 @@ public class PskMessageHandlerTests
     [Fact]
     public void HandleMessage_queues_receiver()
     {
-        var json = """{"rc":"DL1ABC","rl":"JO20AA","sc":"TEST"}""";
+        var json = """{"rc":"DL1ABC","rl":"JO20AA","sc":"TEST","b":"15m"}""";
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
-        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20");
+        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20" && s.Band == "15m");
     }
 
     [Fact]
     public void HandleMessage_queues_sender()
     {
-        var json = """{"sc":"DL1ABC","sl":"JO20AA","rc":"OTHER"}""";
+        var json = """{"sc":"DL1ABC","sl":"JO20AA","rc":"OTHER","b":"15m"}""";
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
-        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20");
+        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20" && s.Band == "15m");
     }
 
     [Fact]
     public void HandleMessage_queues_both_receiver_and_sender()
     {
-        var json = """{"rc":"K4BYN","rl":"FM05QU","sc":"WT9Q","sl":"EN44GB"}""";
+        var json = """{"rc":"K4BYN","rl":"FM05QU","sc":"WT9Q","sl":"EN44GB","b":"20m"}""";
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
         Assert.Equal(2, stations.Count);
-        Assert.Contains(stations, s => s.Callsign == "K4BYN" && s.Grid == "FM05");
-        Assert.Contains(stations, s => s.Callsign == "WT9Q" && s.Grid == "EN44");
+        Assert.Contains(stations, s => s.Callsign == "K4BYN" && s.Grid == "FM05" && s.Band == "20m");
+        Assert.Contains(stations, s => s.Callsign == "WT9Q" && s.Grid == "EN44" && s.Band == "20m");
     }
 
     [Fact]
     public void HandleMessage_skips_missing_locator()
     {
-        var json = """{"rc":"DL1ABC","sc":"TEST"}""";
+        var json = """{"rc":"DL1ABC","sc":"TEST","b":"15m"}""";
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
@@ -68,7 +68,7 @@ public class PskMessageHandlerTests
     [Fact]
     public void HandleMessage_skips_missing_receiver_and_sender()
     {
-        var json = """{"rl":"JO20AA","sl":"EN44GB"}""";
+        var json = """{"rl":"JO20AA","sl":"EN44GB","b":"15m"}""";
         _handler.HandleMessage(json);
 
         Assert.Empty(ReadAll());
@@ -84,7 +84,7 @@ public class PskMessageHandlerTests
     [Fact]
     public void HandleMessage_skips_invalid_grid()
     {
-        var json = """{"rc":"DL1ABC","rl":"ZZ99AA","sc":"TEST"}""";
+        var json = """{"rc":"DL1ABC","rl":"ZZ99AA","sc":"TEST","b":"15m"}""";
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
@@ -94,21 +94,21 @@ public class PskMessageHandlerTests
     [Fact]
     public void HandleMessage_truncates_grid_to_4_chars()
     {
-        var json = """{"rc":"DL1ABC","rl":"JO20AA88","sc":"TEST"}""";
+        var json = """{"rc":"DL1ABC","rl":"JO20AA88","sc":"TEST","b":"15m"}""";
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
-        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20");
+        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Grid == "JO20" && s.Band == "15m");
     }
 
     [Fact]
     public void HandleMessage_normalizes_callsign_case()
     {
-        var json = """{"rc":"dl1abc","rl":"JO20AA","sc":"TEST"}""";
+        var json = """{"rc":"dl1abc","rl":"JO20AA","sc":"TEST","b":"15m"}""";
         _handler.HandleMessage(json);
 
         var stations = ReadAll();
-        Assert.Contains(stations, s => s.Callsign == "DL1ABC");
+        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Band == "15m");
     }
 
     [Fact]
@@ -119,20 +119,48 @@ public class PskMessageHandlerTests
 
         var stations = ReadAll();
         Assert.Equal(2, stations.Count);
-        Assert.Contains(stations, s => s.Callsign == "K4BYN" && s.Grid == "FM05");
-        Assert.Contains(stations, s => s.Callsign == "WT9Q" && s.Grid == "EN44");
+        Assert.Contains(stations, s => s.Callsign == "K4BYN" && s.Grid == "FM05" && s.Band == "6m");
+        Assert.Contains(stations, s => s.Callsign == "WT9Q" && s.Grid == "EN44" && s.Band == "6m");
     }
 
     [Fact]
     public void HandleMessage_queues_multiple_messages()
     {
-        var json1 = """{"rc":"DL1ABC","rl":"JO20AA","sc":"TEST"}""";
-        var json2 = """{"rc":"DL1XYZ","rl":"JO30BB","sc":"TEST"}""";
+        var json1 = """{"rc":"DL1ABC","rl":"JO20AA","sc":"TEST","b":"15m"}""";
+        var json2 = """{"rc":"DL1XYZ","rl":"JO30BB","sc":"TEST","b":"20m"}""";
         _handler.HandleMessage(json1);
         _handler.HandleMessage(json2);
 
         var stations = ReadAll();
         Assert.Contains(stations, s => s.Callsign == "DL1ABC");
         Assert.Contains(stations, s => s.Callsign == "DL1XYZ");
+    }
+
+    [Fact]
+    public void HandleMessage_skips_missing_band()
+    {
+        var json = """{"rc":"DL1ABC","rl":"JO20AA","sc":"TEST"}""";
+        _handler.HandleMessage(json);
+
+        Assert.Empty(ReadAll());
+    }
+
+    [Fact]
+    public void HandleMessage_skips_invalid_band()
+    {
+        var json = """{"rc":"DL1ABC","rl":"JO20AA","sc":"TEST","b":"invalid"}""";
+        _handler.HandleMessage(json);
+
+        Assert.Empty(ReadAll());
+    }
+
+    [Fact]
+    public void HandleMessage_normalizes_band_case()
+    {
+        var json = """{"rc":"DL1ABC","rl":"JO20AA","sc":"TEST","b":"15M"}""";
+        _handler.HandleMessage(json);
+
+        var stations = ReadAll();
+        Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Band == "15m");
     }
 }

@@ -6,24 +6,28 @@ using Microsoft.AspNetCore.Mvc;
 namespace Gridifier.Api.Controllers;
 
 [ApiController]
-[Route("api/stations")]
+[Route("api/v1/grid/{band}/{*callsign}")]
 public class StationsController(StationRepository repo, StationCache cache) : ControllerBase
 {
-    [HttpGet("{*callsign}")]
-    public IActionResult Get(string callsign)
+    [HttpGet]
+    public IActionResult Get(string band, string callsign)
     {
+        band = BandValidator.Normalize(band);
+        if (!BandValidator.IsValid(band))
+            return BadRequest("Invalid band");
+
         var normalized = CallsignValidator.Normalize(callsign);
 
         if (!CallsignValidator.IsValid(normalized))
             return BadRequest("Invalid callsign");
 
-        if (cache.TryGet(normalized, out var grid, out var lastUpdate))
-            return Ok(new { Grid = GridValidator.Shorten(grid!), LastUpdate = lastUpdate!.Value });
+        if (cache.TryGet(normalized, band, out var grid, out var lastUpdate))
+            return Ok(new { g = GridValidator.Shorten(grid!), t = new DateTimeOffset(lastUpdate!.Value).ToUnixTimeSeconds() });
 
-        var station = repo.GetByCallsign(normalized);
+        var station = repo.GetByCallsignAndBand(normalized, band);
         if (station is null)
             return NotFound();
 
-        return Ok(new { Grid = GridValidator.Shorten(station.Grid), station.LastUpdate });
+        return Ok(new { g = GridValidator.Shorten(station.Grid), t = new DateTimeOffset(station.LastUpdate).ToUnixTimeSeconds() });
     }
 }

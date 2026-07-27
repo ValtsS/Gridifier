@@ -32,28 +32,28 @@ public class StationRepositoryBatchTests : IDisposable
     {
         var stations = new List<Station>
         {
-            new() { Callsign = "ALPHA", Grid = "JO20AA" },
-            new() { Callsign = "BETA", Grid = "JO30BB" },
+            new() { Callsign = "ALPHA", Band = "15m", Grid = "JO20AA" },
+            new() { Callsign = "BETA", Band = "20m", Grid = "JO30BB" },
         };
 
         _repo.UpsertMany(stations);
 
-        Assert.NotNull(_repo.GetByCallsign("ALPHA"));
-        Assert.NotNull(_repo.GetByCallsign("BETA"));
+        Assert.NotNull(_repo.GetByCallsignAndBand("ALPHA", "15m"));
+        Assert.NotNull(_repo.GetByCallsignAndBand("BETA", "20m"));
     }
 
     [Fact]
     public void UpsertMany_updates_existing()
     {
-        _repo.Upsert(new Station { Callsign = "ALPHA", Grid = "JO20AA" });
+        _repo.Upsert(new Station { Callsign = "ALPHA", Band = "15m", Grid = "JO20AA" });
 
         _repo.UpsertMany(new List<Station>
         {
-            new() { Callsign = "ALPHA", Grid = "JO99ZZ" },
-            new() { Callsign = "BETA", Grid = "JO30BB" },
+            new() { Callsign = "ALPHA", Band = "15m", Grid = "JO99ZZ" },
+            new() { Callsign = "BETA", Band = "20m", Grid = "JO30BB" },
         });
 
-        var alpha = _repo.GetByCallsign("ALPHA");
+        var alpha = _repo.GetByCallsignAndBand("ALPHA", "15m");
         Assert.NotNull(alpha);
         Assert.Equal("JO99ZZ", alpha.Grid);
     }
@@ -105,7 +105,7 @@ public class DatabaseWriterTests : IDisposable
 
         for (int i = 0; i < 100; i++)
         {
-            _channel.Writer.TryWrite(new Station { Callsign = $"TEST{i}", Grid = "JO20AA" });
+            _channel.Writer.TryWrite(new Station { Callsign = $"TEST{i}", Band = "15m", Grid = "JO20AA" });
         }
 
         await Task.Delay(200);
@@ -123,11 +123,11 @@ public class DatabaseWriterTests : IDisposable
 
         _ = writer.StartAsync(CancellationToken.None);
 
-        _channel.Writer.TryWrite(new Station { Callsign = "TEST1", Grid = "JO20AA" });
+        _channel.Writer.TryWrite(new Station { Callsign = "TEST1", Band = "15m", Grid = "JO20AA" });
 
         await Task.Delay(1500);
 
-        Assert.NotNull(_repo.GetByCallsign("TEST1"));
+        Assert.NotNull(_repo.GetByCallsignAndBand("TEST1", "15m"));
 
         await writer.StopAsync(CancellationToken.None);
     }

@@ -23,15 +23,22 @@ public class PskMessageHandler(Channel<Station> stationChannel)
         {
             var root = doc.RootElement;
 
+            var band = root.TryGetProperty("b", out var bEl)
+                ? BandValidator.Normalize(bEl.GetString() ?? "")
+                : "";
+
+            if (!BandValidator.IsValid(band))
+                return;
+
             if (root.TryGetProperty("rc", out var rcEl))
-                TryQueue(rcEl, root, "rl");
+                TryQueue(rcEl, root, "rl", band);
 
             if (root.TryGetProperty("sc", out var scEl))
-                TryQueue(scEl, root, "sl");
+                TryQueue(scEl, root, "sl", band);
         }
     }
 
-    private void TryQueue(JsonElement callsignEl, JsonElement root, string gridKey)
+    private void TryQueue(JsonElement callsignEl, JsonElement root, string gridKey, string band)
     {
         var callsign = callsignEl.GetString();
         if (string.IsNullOrWhiteSpace(callsign))
@@ -48,6 +55,6 @@ public class PskMessageHandler(Channel<Station> stationChannel)
 
         grid = GridValidator.Shorten(grid);
 
-        stationChannel.Writer.TryWrite(new Station { Callsign = callsign, Grid = grid });
+        stationChannel.Writer.TryWrite(new Station { Callsign = callsign, Band = band, Grid = grid });
     }
 }

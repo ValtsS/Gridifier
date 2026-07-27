@@ -16,9 +16,11 @@ public class StationCache
 
     public int Count => _cache.Count;
 
-    public bool TryGet(string callsign, out string? grid, out DateTime? lastUpdate)
+    private static string Key(string callsign, string band) => $"{callsign}\0{band}";
+
+    public bool TryGet(string callsign, string band, out string? grid, out DateTime? lastUpdate)
     {
-        if (_cache.TryGetValue(callsign, out var entry))
+        if (_cache.TryGetValue(Key(callsign, band), out var entry))
         {
             grid = entry.Grid;
             lastUpdate = entry.LastDbWrite;
@@ -32,7 +34,7 @@ public class StationCache
 
     public bool ShouldSkip(Station station)
     {
-        if (!_cache.TryGetValue(station.Callsign, out var entry))
+        if (!_cache.TryGetValue(Key(station.Callsign, station.Band), out var entry))
             return false;
 
         if (entry.Grid != station.Grid)
@@ -44,8 +46,9 @@ public class StationCache
     public void MarkWritten(Station station)
     {
         var now = DateTime.UtcNow;
-        _cache[station.Callsign] = new Entry(station.Grid, now);
-        _evictionQueue.Enqueue(station.Callsign, now);
+        var key = Key(station.Callsign, station.Band);
+        _cache[key] = new Entry(station.Grid, now);
+        _evictionQueue.Enqueue(key, now);
     }
 
     public void MaybeEvict()
@@ -63,14 +66,14 @@ public class StationCache
         var now = DateTime.UtcNow;
         var cutoff = now - EntryTtl;
 
-        while (_evictionQueue.TryPeek(out var callsign, out var timestamp))
+        while (_evictionQueue.TryPeek(out var key, out var timestamp))
         {
-            if (_cache.TryGetValue(callsign, out var entry) && entry.LastDbWrite == timestamp)
+            if (_cache.TryGetValue(key, out var entry) && entry.LastDbWrite == timestamp)
             {
                 if (entry.LastDbWrite >= cutoff && _cache.Count <= MaxSize)
                     break;
 
-                _cache.Remove(callsign);
+                _cache.Remove(key);
             }
 
             _evictionQueue.Dequeue();

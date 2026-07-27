@@ -10,9 +10,11 @@ public static class DatabaseInitializer
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             CREATE TABLE IF NOT EXISTS stations (
-                callsign     TEXT NOT NULL PRIMARY KEY,
+                callsign     TEXT NOT NULL,
+                band         TEXT NOT NULL DEFAULT '',
                 grid         TEXT NOT NULL,
-                last_update  TEXT NOT NULL DEFAULT (datetime('now'))
+                last_update  TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (callsign, band)
             );
             """;
         cmd.ExecuteNonQuery();

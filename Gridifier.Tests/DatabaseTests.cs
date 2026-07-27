@@ -27,22 +27,23 @@ public class StationRepositoryTests : IDisposable
     [Fact]
     public void Upsert_creates_new_record()
     {
-        var station = new Station { Callsign = "TEST1", Grid = "JO20AA" };
+        var station = new Station { Callsign = "TEST1", Band = "15m", Grid = "JO20AA" };
         _repo.Upsert(station);
 
-        var result = _repo.GetByCallsign("TEST1");
+        var result = _repo.GetByCallsignAndBand("TEST1", "15m");
         Assert.NotNull(result);
         Assert.Equal("TEST1", result.Callsign);
+        Assert.Equal("15m", result.Band);
         Assert.Equal("JO20AA", result.Grid);
     }
 
     [Fact]
     public void Upsert_updates_existing_record()
     {
-        _repo.Upsert(new Station { Callsign = "TEST1", Grid = "JO20AA" });
-        _repo.Upsert(new Station { Callsign = "TEST1", Grid = "JO30BB" });
+        _repo.Upsert(new Station { Callsign = "TEST1", Band = "15m", Grid = "JO20AA" });
+        _repo.Upsert(new Station { Callsign = "TEST1", Band = "15m", Grid = "JO30BB" });
 
-        var result = _repo.GetByCallsign("TEST1");
+        var result = _repo.GetByCallsignAndBand("TEST1", "15m");
         Assert.NotNull(result);
         Assert.Equal("JO30BB", result.Grid);
     }
@@ -50,13 +51,13 @@ public class StationRepositoryTests : IDisposable
     [Fact]
     public void Upsert_updates_last_update_timestamp()
     {
-        _repo.Upsert(new Station { Callsign = "TEST1", Grid = "JO20AA" });
-        var first = _repo.GetByCallsign("TEST1")!;
+        _repo.Upsert(new Station { Callsign = "TEST1", Band = "15m", Grid = "JO20AA" });
+        var first = _repo.GetByCallsignAndBand("TEST1", "15m")!;
         var firstUpdate = first.LastUpdate;
 
         Thread.Sleep(1500);
-        _repo.Upsert(new Station { Callsign = "TEST1", Grid = "JO20AA" });
-        var second = _repo.GetByCallsign("TEST1")!;
+        _repo.Upsert(new Station { Callsign = "TEST1", Band = "15m", Grid = "JO20AA" });
+        var second = _repo.GetByCallsignAndBand("TEST1", "15m")!;
 
         Assert.True(second.LastUpdate > firstUpdate);
     }
@@ -64,16 +65,16 @@ public class StationRepositoryTests : IDisposable
     [Fact]
     public void GetByCallsign_returns_null_when_not_found()
     {
-        var result = _repo.GetByCallsign("NONEXISTENT");
+        var result = _repo.GetByCallsignAndBand("NONEXISTENT", "15m");
         Assert.Null(result);
     }
 
     [Fact]
     public void GetAll_returns_all_stations_ordered_by_callsign()
     {
-        _repo.Upsert(new Station { Callsign = "BETA", Grid = "JO10AA" });
-        _repo.Upsert(new Station { Callsign = "ALPHA", Grid = "JO20BB" });
-        _repo.Upsert(new Station { Callsign = "GAMMA", Grid = "JO30CC" });
+        _repo.Upsert(new Station { Callsign = "BETA", Band = "15m", Grid = "JO10AA" });
+        _repo.Upsert(new Station { Callsign = "ALPHA", Band = "20m", Grid = "JO20BB" });
+        _repo.Upsert(new Station { Callsign = "GAMMA", Band = "15m", Grid = "JO30CC" });
 
         var all = _repo.GetAll().ToList();
 
@@ -88,6 +89,20 @@ public class StationRepositoryTests : IDisposable
     {
         var all = _repo.GetAll().ToList();
         Assert.Empty(all);
+    }
+
+    [Fact]
+    public void Same_callsign_different_bands_are_separate()
+    {
+        _repo.Upsert(new Station { Callsign = "TEST1", Band = "15m", Grid = "JO20AA" });
+        _repo.Upsert(new Station { Callsign = "TEST1", Band = "20m", Grid = "JO30BB" });
+
+        var r1 = _repo.GetByCallsignAndBand("TEST1", "15m");
+        var r2 = _repo.GetByCallsignAndBand("TEST1", "20m");
+        Assert.NotNull(r1);
+        Assert.NotNull(r2);
+        Assert.Equal("JO20AA", r1.Grid);
+        Assert.Equal("JO30BB", r2.Grid);
     }
 }
 
