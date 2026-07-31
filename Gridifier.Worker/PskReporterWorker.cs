@@ -44,16 +44,22 @@ public class PskReporterWorker(
         var factory = new MqttClientFactory();
         using var client = factory.CreateMqttClient();
 
-        client.DisconnectedAsync += async args =>
+        client.DisconnectedAsync += args =>
         {
             stats.MqttConnected = false;
+            stats.IncrementDisconnects();
+            stats.LastDisconnectAt = DateTime.UtcNow;
+            stats.LastDisconnectReason = args.Reason.ToString();
+            stats.MessagesPerSecond = 0;
             logger.LogWarning("Disconnected (reason: {Reason}), will reconnect", args.Reason);
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         };
 
         logger.LogInformation("Connecting to {Host}:{Port}", settings.Host, settings.Port);
         await client.ConnectAsync(_connOptions, stoppingToken);
         stats.MqttConnected = true;
+        stats.IncrementConnects();
+        stats.LastConnectAt = DateTime.UtcNow;
         logger.LogInformation("Connected");
 
         var subscribeOptions = new MqttClientSubscribeOptionsBuilder()
@@ -63,8 +69,10 @@ public class PskReporterWorker(
         await client.SubscribeAsync(subscribeOptions, stoppingToken);
         logger.LogInformation("Subscribed to {Topic}", settings.Topic);
 
-        var handler = new PskMessageHandler(stationChannel);
+        var handler = new PskMessageHandler(stationChannel, stats);
         var lastKeepalive = DateTime.UtcNow;
+        var lastRateAt = DateTime.UtcNow;
+        var lastRateCount = 0L;
 
         client.ApplicationMessageReceivedAsync += args =>
         {
@@ -86,10 +94,19 @@ public class PskReporterWorker(
         {
             await Task.Delay(1000, stoppingToken);
 
-            if (DateTime.UtcNow - lastKeepalive >= KeepaliveLog)
+            var now = DateTime.UtcNow;
+            var elapsed = now - lastRateAt;
+            if (elapsed >= TimeSpan.FromSeconds(1))
+            {
+                stats.MessagesPerSecond = (stats.TotalMessagesReceived - lastRateCount) / elapsed.TotalSeconds;
+                lastRateCount = stats.TotalMessagesReceived;
+                lastRateAt = now;
+            }
+
+            if (now - lastKeepalive >= KeepaliveLog)
             {
                 logger.LogInformation("Still listening - received {Total} messages so far", stats.TotalMessagesReceived);
-                lastKeepalive = DateTime.UtcNow;
+                lastKeepalive = now;
             }
 
             if (!client.IsConnected)

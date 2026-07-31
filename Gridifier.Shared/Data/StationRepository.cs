@@ -26,14 +26,16 @@ public class StationRepository(DbConnectionFactory connectionFactory)
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO stations (callsign, band, grid, last_update)
-            VALUES (@callsign, @band, @grid, datetime('now'))
+            VALUES (@callsign, @band, @grid, @last_update)
             ON CONFLICT(callsign, band) DO UPDATE SET
                 grid = @grid,
-                last_update = datetime('now');
+                last_update = @last_update
+            WHERE excluded.last_update > stations.last_update;
             """;
         cmd.Parameters.AddWithValue("@callsign", station.Callsign);
         cmd.Parameters.AddWithValue("@band", station.Band);
         cmd.Parameters.AddWithValue("@grid", station.Grid);
+        cmd.Parameters.AddWithValue("@last_update", station.LastUpdate);
         cmd.ExecuteNonQuery();
     }
 
@@ -47,21 +49,24 @@ public class StationRepository(DbConnectionFactory connectionFactory)
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO stations (callsign, band, grid, last_update)
-            VALUES (@callsign, @band, @grid, datetime('now'))
+            VALUES (@callsign, @band, @grid, @last_update)
             ON CONFLICT(callsign, band) DO UPDATE SET
                 grid = @grid,
-                last_update = datetime('now');
+                last_update = @last_update
+            WHERE excluded.last_update > stations.last_update;
             """;
 
-        var callsignParam = cmd.Parameters.Add("@callsign", Microsoft.Data.Sqlite.SqliteType.Text);
-        var bandParam = cmd.Parameters.Add("@band", Microsoft.Data.Sqlite.SqliteType.Text);
-        var gridParam = cmd.Parameters.Add("@grid", Microsoft.Data.Sqlite.SqliteType.Text);
+        var callsignParam = cmd.Parameters.Add("@callsign", SqliteType.Text);
+        var bandParam = cmd.Parameters.Add("@band", SqliteType.Text);
+        var gridParam = cmd.Parameters.Add("@grid", SqliteType.Text);
+        var lastUpdateParam = cmd.Parameters.Add("@last_update", SqliteType.Integer);
 
         foreach (var station in stations)
         {
             callsignParam.Value = station.Callsign;
             bandParam.Value = station.Band;
             gridParam.Value = station.Grid;
+            lastUpdateParam.Value = station.LastUpdate;
             cmd.ExecuteNonQuery();
         }
 
@@ -96,7 +101,7 @@ public class StationRepository(DbConnectionFactory connectionFactory)
             Callsign = reader.GetString(0),
             Band = reader.GetString(1),
             Grid = reader.GetString(2),
-            LastUpdate = DateTime.Parse(reader.GetString(3), null, System.Globalization.DateTimeStyles.AssumeUniversal)
+            LastUpdate = reader.GetInt64(3)
         };
     }
 }

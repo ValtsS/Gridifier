@@ -1,4 +1,3 @@
-using Gridifier.Shared.Data;
 using Gridifier.Shared.Validation;
 using Gridifier.Worker;
 using Microsoft.AspNetCore.Mvc;
@@ -7,7 +6,7 @@ namespace Gridifier.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/grid/{band}/{*callsign}")]
-public class StationsController(StationRepository repo, StationCache cache) : ControllerBase
+public class StationsController(StationCache cache) : ControllerBase
 {
     [HttpGet]
     public IActionResult Get(string band, string callsign)
@@ -21,13 +20,9 @@ public class StationsController(StationRepository repo, StationCache cache) : Co
         if (!CallsignValidator.IsValid(normalized))
             return BadRequest("Invalid callsign");
 
-        if (cache.TryGet(normalized, band, out var grid, out var lastUpdate))
-            return Ok(new { g = GridValidator.Shorten(grid!), t = new DateTimeOffset(lastUpdate!.Value).ToUnixTimeSeconds() });
+        if (cache.TryGet(normalized, band, out var grid, out var lastHeard))
+            return Ok(new { g = grid, t = lastHeard });
 
-        var station = repo.GetByCallsignAndBand(normalized, band);
-        if (station is null)
-            return NotFound();
-
-        return Ok(new { g = GridValidator.Shorten(station.Grid), t = new DateTimeOffset(station.LastUpdate).ToUnixTimeSeconds() });
+        return NotFound();
     }
 }

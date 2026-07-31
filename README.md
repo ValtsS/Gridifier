@@ -8,24 +8,29 @@ Real-time PSK Reporter station grid locator tracker. Listens to the PSK Reporter
 MQTT (pskreporter.info:1883)
        │
        ▼
- PskReporterWorker ──► Channel<Station> ──► DatabaseWriter ──► SQLite (WAL)
-                                              │                      │
-                                              ▼                      ▼
-                                         StationCache         StationRepository
-                                              │                      │
-                                              ▼                      ▼
-                                        StatsController ◄── AppStats
-                                              │
-                                              ▼
-                                         StationsController (GET /api/v1/grid/{band}/{callsign})
+ PskReporterWorker ──► Channel<Station> ──► DatabaseWriter ──► SQLite (WAL, recovery log)
+                       │                       │
+                       │                       │  guarded upserts (no-op when already persisted)
+                       │                       ▼
+                       │                 StationSweeper (periodic quiet flush)
+                       │
+                       ▼
+                  StationCache (source of truth, all in RAM)
+                       │
+                       ▼
+              StationsController (GET /api/v1/grid/{band}/{callsign})
 ```
 
-- **PskReporterWorker** — connects to MQTT, subscribes to `pskr/filter/v2/+/...` (all bands), parses JSON messages
+- **PskReporterWorker** — connects to MQTT, subscribes to `pskr/filter/v2/+/...` (all bands), parses JSON messages; tracks connect/disconnect counts, timestamps, and disconnect reasons
 - **PskMessageHandler** — extracts `rc`/`rl` (receiver) and `sc`/`sl` (sender) pairs along with `b` (band), validates, truncates grids to 4 chars, writes to channel
-- **DatabaseWriter** — reads from channel in batches (100 items / 1s), deduplicates via `StationCache` (same grid = skip for 1h), bulk-upserts to SQLite
-- **StationCache** — in-memory LRU cache (10k entries), PriorityQueue-based eviction, used by API for low-latency reads
-- **StationsController** — `GET /api/v1/grid/{band}/{*callsign}` returns `{ g, t }` (1-letter fields, unix timestamp), checks cache first, falls back to DB
-- **StatsController** — `GET /api/stats` returns connection status, message rates, cache/DB stats
+- **DatabaseWriter** — reads from channel, updates `StationCache` (per-band dictionaries, 8-byte entries: grid encoded as `ushort`, last heard as `uint` unix seconds); persists immediately only for new stations or grid changes, in batches
+- **StationCache** — source of truth held entirely in RAM; loaded once from SQLite at startup, then served directly by the API with no DB round-trips
+- **DatabaseBackup / DatabaseBackupWorker** — periodic SQLite online-backup snapshots (`gridifier.db.bak`, keeping 1 previous generation) plus a checkpoint+snapshot on graceful shutdown; on startup a `PRAGMA quick_check` runs and the DB is restored from the latest snapshot if corrupt (corrupt file preserved as `*.corrupt-<ts>`, never silently destroyed)
+- **StationSweeper** — periodic sweep that flushes stations silent for longer than the sweep interval (guarded upsert makes already-persisted rows no-ops); chunked transactions keep DB write locks to milliseconds
+- **StatsRefresher** — periodically precomputes active-station count and per-band breakdown so the stats endpoint never scans the cache on request
+- **StationsController** — `GET /api/v1/grid/{band}/{*callsign}` returns `{ g, t }` (1-letter fields, unix timestamp), reads only from the cache
+- **StatsController** — `GET /api/stats` returns uptime, MQTT status, message rate, dropped-message count, connect/disconnect history, write totals, cache/DB sizes, active-station count, per-band breakdown, and last sweep info; disabled by default (`Stats:Enabled`), serves precomputed values (no cache scans on request)
+- **StationRepository** — SQLite reads/writes; upserts are guarded with `WHERE excluded.last_update > stations.last_update`
 
 ## Prerequisites
 
@@ -55,8 +60,8 @@ curl http://localhost:5027/api/v1/grid/15m/DL1ABC
 
 curl http://localhost:5027/api/v1/grid/15m/OH1AA/MM
 
-# Server stats
-curl http://localhost:5027/api/stats
+# Server stats (disabled by default)
+curl http://localhost:5027/api/stats   # set Stats:Enabled=true to enable
 ```
 
 ## Configuration
@@ -71,7 +76,19 @@ curl http://localhost:5027/api/stats
   "Mqtt": {
     "Host": "mqtt.pskreporter.info",
     "Port": 1883,
-    "Topic": "pskr/filter/v2/+/+/+/+/+/+/+"
+    "Topic": "pskr/filter/v2/+/+/+/+/+/+/+/+"
+  },
+  "Cache": {
+    "SweepIntervalMinutes": 5
+  },
+  "Stats": {
+    "Enabled": false,
+    "RefreshIntervalSeconds": 30,
+    "ActiveWindowMinutes": 10
+  },
+  "Backup": {
+    "Enabled": true,
+    "IntervalHours": 6
   }
 }
 ```

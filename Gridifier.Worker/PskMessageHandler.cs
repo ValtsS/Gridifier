@@ -5,8 +5,24 @@ using Gridifier.Shared.Validation;
 
 namespace Gridifier.Worker;
 
-public class PskMessageHandler(Channel<Station> stationChannel)
+public class PskMessageHandler
 {
+    public const int StationChannelCapacity = 10_000;
+
+    private readonly Channel<Station> _stationChannel;
+    private readonly AppStats _stats;
+    private readonly int _channelCapacity;
+
+    public PskMessageHandler(
+        Channel<Station> stationChannel,
+        AppStats stats,
+        int channelCapacity = StationChannelCapacity)
+    {
+        _stationChannel = stationChannel;
+        _stats = stats;
+        _channelCapacity = channelCapacity;
+    }
+
     public void HandleMessage(string payload)
     {
         JsonDocument doc;
@@ -55,6 +71,9 @@ public class PskMessageHandler(Channel<Station> stationChannel)
 
         grid = GridValidator.Shorten(grid);
 
-        stationChannel.Writer.TryWrite(new Station { Callsign = callsign, Band = band, Grid = grid });
+        if (_stationChannel.Reader.CanCount && _stationChannel.Reader.Count >= _channelCapacity)
+            _stats.IncrementDropped();
+
+        _stationChannel.Writer.TryWrite(new Station { Callsign = callsign, Band = band, Grid = grid });
     }
 }

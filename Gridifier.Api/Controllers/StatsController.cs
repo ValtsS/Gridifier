@@ -5,21 +5,33 @@ namespace Gridifier.Api.Controllers;
 
 [ApiController]
 [Route("api/stats")]
-public class StatsController(AppStats stats) : ControllerBase
+public class StatsController(AppStats stats, IConfiguration config) : ControllerBase
 {
     [HttpGet]
     public IActionResult Get()
     {
+        if (!config.GetValue("Stats:Enabled", false))
+            return NotFound();
+
         return Ok(new
         {
             uptime = DateTime.UtcNow - stats.Uptime,
             mqttConnected = stats.MqttConnected,
             totalMessagesReceived = stats.TotalMessagesReceived,
-            totalWritten = stats.TotalWritten,
-            totalSkipped = stats.TotalSkipped,
             messagesPerSecond = Math.Round(stats.MessagesPerSecond, 1),
+            droppedMessages = stats.DroppedMessages,
+            totalWritten = stats.TotalWritten,
             cacheSize = stats.CacheSize,
-            databaseCount = stats.DatabaseCount
+            activeStations = stats.ActiveStations,
+            stationsByBand = stats.StationsByBand,
+            databaseCount = stats.DatabaseCount,
+            totalConnects = stats.TotalConnects,
+            totalDisconnects = stats.TotalDisconnects,
+            lastConnectAt = stats.LastConnectAt,
+            lastDisconnectAt = stats.LastDisconnectAt,
+            lastDisconnectReason = stats.LastDisconnectReason,
+            lastSweepAt = stats.LastSweepAt,
+            lastSweepPersisted = stats.LastSweepPersisted
         });
     }
 }

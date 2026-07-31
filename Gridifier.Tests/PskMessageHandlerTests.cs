@@ -8,11 +8,13 @@ public class PskMessageHandlerTests
 {
     private readonly Channel<Station> _channel;
     private readonly PskMessageHandler _handler;
+    private readonly AppStats _stats;
 
     public PskMessageHandlerTests()
     {
         _channel = Channel.CreateUnbounded<Station>();
-        _handler = new PskMessageHandler(_channel);
+        _stats = new AppStats();
+        _handler = new PskMessageHandler(_channel, _stats);
     }
 
     private List<Station> ReadAll()
@@ -162,5 +164,34 @@ public class PskMessageHandlerTests
 
         var stations = ReadAll();
         Assert.Contains(stations, s => s.Callsign == "DL1ABC" && s.Band == "15m");
+    }
+
+    [Fact]
+    public void HandleMessage_counts_dropped_when_channel_full()
+    {
+        var bounded = Channel.CreateBounded<Station>(new BoundedChannelOptions(2)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest
+        });
+        var handler = new PskMessageHandler(bounded, _stats, channelCapacity: 2);
+
+        for (int i = 0; i < 10; i++)
+            handler.HandleMessage($$"""{"rc":"TEST{{i}}","rl":"JO20AA","b":"15m"}""");
+
+        Assert.Equal(8, _stats.DroppedMessages);
+    }
+
+    [Fact]
+    public void HandleMessage_does_not_count_drops_when_not_full()
+    {
+        var bounded = Channel.CreateBounded<Station>(new BoundedChannelOptions(10)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest
+        });
+        var handler = new PskMessageHandler(bounded, _stats, channelCapacity: 10);
+
+        handler.HandleMessage("""{"rc":"TEST1","rl":"JO20AA","b":"15m"}""");
+
+        Assert.Equal(0, _stats.DroppedMessages);
     }
 }

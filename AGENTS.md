@@ -1,0 +1,67 @@
+# AGENTS.md
+
+Guidance for AI agents working on Gridifier.
+
+## Project overview
+
+Real-time PSK Reporter station grid locator tracker. Listens to the PSK Reporter MQTT feed, extracts receiver/sender callsigns and Maidenhead grid locators, serves them via a REST API.
+
+**Core architecture: RAM is the source of truth; SQLite is a recovery log.**
+- All reads come from `StationCache` (per-band `ConcurrentDictionary`, 8-byte entries `(ushort Grid, uint LastHeard)`).
+- DB is loaded once at startup (`cache.Seed`) and written to via guarded upserts; never read on the request path.
+- `StationsController` reads only from the cache (no DB round-trips).
+
+## Commands
+
+- Build: `dotnet build Gridifier.slnx`
+- Test: `dotnet test Gridifier.slnx` (solution file is `.slnx`, not `.sln`)
+
+## Project layout
+
+- `Gridifier.Api` — ASP.NET Core host; `Program.cs` wires everything manually (no `Startup` class); controllers, workers, rate limiting
+- `Gridifier.Worker` — class library: `StationCache`, `DatabaseWriter`, `StationSweeper`, `StatsRefresher`, `DatabaseBackupWorker`, `PskReporterWorker`, `PskMessageHandler`, `AppStats`
+- `Gridifier.Shared` — models (`Station`, `MqttSettings`), data (`DatabaseInitializer`, `StationRepository`, `DbConnectionFactory`, `DatabaseBackup`), validation (`CallsignValidator`, `BandValidator`, `GridValidator`, `GridCodec`)
+- `Gridifier.Tests` — xUnit; repo tests use temp-file SQLite DBs; API tests use `WebApplicationFactory<Program>`
+
+## Data flow
+
+```
+MQTT → PskReporterWorker → Channel<Station> → DatabaseWriter → guarded upsert → SQLite (WAL)
+                             │                    │
+                             ▼                    ▼
+                        StationCache   StationSweeper (periodic quiet flush)
+                             │
+                             ▼
+                    StationsController (cache-only reads)
+```
+
+## Key conventions and gotchas
+
+- **Grids are 4-char Maidenhead, encoded to `ushort`** via `GridCodec` (32,400 possible codes, bijective, case-insensitive). PskMessageHandler truncates to 4 chars before writing.
+- **`Station.LastUpdate` is a `long`** (unix seconds). `uint` in cache entries (fits until 2106).
+- **Guarded upserts**: `ON CONFLICT(callsign, band) DO UPDATE ... WHERE excluded.last_update > stations.last_update`. A station with `LastUpdate = 0` will NOT update an existing row — tests must set explicit `LastUpdate` values.
+- **Cache `TryUpdate` semantics**: returns `true` only for a new station or a grid change (immediate DB write). Reports with `lastHeard <= existing.LastHeard` are ignored (1-second resolution — same-second grid changes are dropped by design).
+- **Persist budget**: repeat same-grid reports are NOT written to DB; the `StationSweeper` flushes quiet stations (chunked transactions, guarded upserts make already-persisted rows no-ops).
+- **DB durability**: `DatabaseBackup` takes online-backup snapshots (`{db}.bak`, 1 previous generation via `.bak.1`) on a timer and on graceful shutdown. Startup runs `PRAGMA quick_check`; if corrupt, the DB is restored from the latest snapshot (corrupt file preserved as `*.corrupt-<ts>`, never silently destroyed). Connections in `DatabaseBackup` use `Pooling=False` so file operations can move/overwrite the DB — do NOT remove that.
+- **Band normalization**: lowercase (`BandValidator.Normalize` → `ToLowerInvariant`, regex `^\d+[cm]$` IgnoreCase). Callsigns uppercase. Validators normalize rather than throw.
+- **Channel**: bounded `Channel<Station>` (capacity 10k, `DropOldest`), drops counted at the producer in `PskMessageHandler`.
+- **Stats are precomputed** — `StatsRefresher` periodically fills `AppStats.ActiveStations`/`StationsByBand`/`CacheSize`; the stats endpoint must NOT scan the cache per request. `/api/stats` is disabled by default (`Stats:Enabled`) and returns 404 when off.
+- **`MqttSettings.Topic`** subscribes to all bands: `pskr/filter/v2/+/+/+/+/+/+/+/+`. Message fields: `rc`/`rl` (receiver), `sc`/`sl` (sender), `b` (band).
+
+## API
+
+- `GET /api/v1/grid/{band}/{*callsign}` → `{ g, t }` (grid, unix seconds) or 400/404. `{*callsign}` catch-all handles `/` in callsigns like `OH1AA/MM`.
+- `GET /api/stats` → operational stats incl. connect/disconnect history; disabled by default (`Stats:Enabled`).
+
+## Config (`Gridifier.Api/appsettings.json`)
+
+- `Cache:SweepIntervalMinutes` (default 5)
+- `Stats:Enabled` (default false), `Stats:RefreshIntervalSeconds` (30), `Stats:ActiveWindowMinutes` (10)
+- `Backup:Enabled` (default true), `Backup:IntervalHours` (6)
+
+## Testing notes
+
+- DB/repo tests: each fixture creates a fresh temp-file DB and initializes schema.
+- Writer tests use `WaitUntil(...)` polling, not fixed sleeps.
+- When adding API tests that seed the cache, seed via `StationCache.Seed` (controller reads only cache). Use distinct callsigns per test — the cache singleton persists across tests in a fixture.
+- API tests that toggle `Stats:Enabled` use `WithWebHostBuilder` + `ConfigureAppConfiguration` (the controller reads `IConfiguration` per request, so overrides apply). Each such test needs its own `WebApplicationFactory` instance.

@@ -21,11 +21,15 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-0 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 appuser \
+    && mkdir -p /data \
+    && chown -R appuser:appuser /app /data
 
 COPY --from=build /app .
 
 VOLUME /data
 ENV ConnectionStrings__Gridifier="Data Source=/data/gridifier.db"
 
+USER appuser
 ENTRYPOINT ["dotnet", "Gridifier.Api.dll"]

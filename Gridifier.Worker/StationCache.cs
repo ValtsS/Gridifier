@@ -1,82 +1,104 @@
-using Gridifier.Shared.Models;
+using System.Collections.Concurrent;
+using Gridifier.Shared.Validation;
 
 namespace Gridifier.Worker;
 
 public class StationCache
 {
-    private const int MaxSize = 10_000;
-    private static readonly TimeSpan DbWriteCooldown = TimeSpan.FromHours(1);
-    private static readonly TimeSpan EntryTtl = TimeSpan.FromHours(2);
+    private readonly record struct Entry(ushort Grid, uint LastHeard);
 
-    private record Entry(string Grid, DateTime LastDbWrite);
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, Entry>> _byBand = new();
 
-    private readonly Dictionary<string, Entry> _cache = new(MaxSize);
-    private readonly PriorityQueue<string, DateTime> _evictionQueue = new();
-    private int _flushCount;
-
-    public int Count => _cache.Count;
-
-    private static string Key(string callsign, string band) => $"{callsign}\0{band}";
-
-    public bool TryGet(string callsign, string band, out string? grid, out DateTime? lastUpdate)
+    public long Count
     {
-        if (_cache.TryGetValue(Key(callsign, band), out var entry))
+        get
         {
-            grid = entry.Grid;
-            lastUpdate = entry.LastDbWrite;
+            long total = 0;
+            foreach (var (_, band) in _byBand)
+                total += band.Count;
+            return total;
+        }
+    }
+
+    public bool TryGet(string callsign, string band, out string? grid, out uint lastHeard)
+    {
+        if (_byBand.TryGetValue(band, out var bandDict) && bandDict.TryGetValue(callsign, out var entry))
+        {
+            grid = GridCodec.Decode(entry.Grid);
+            lastHeard = entry.LastHeard;
             return true;
         }
 
         grid = null;
-        lastUpdate = null;
+        lastHeard = 0;
         return false;
     }
 
-    public bool ShouldSkip(Station station)
+    // Returns true if this report requires an immediate DB write
+    // (new station or grid change). Always refreshes lastHeard.
+    public bool TryUpdate(string callsign, string band, ushort grid, uint lastHeard)
     {
-        if (!_cache.TryGetValue(Key(station.Callsign, station.Band), out var entry))
-            return false;
+        var bandDict = _byBand.GetOrAdd(band, _ => new ConcurrentDictionary<string, Entry>());
 
-        if (entry.Grid != station.Grid)
-            return false;
-
-        return DateTime.UtcNow - entry.LastDbWrite < DbWriteCooldown;
-    }
-
-    public void MarkWritten(Station station)
-    {
-        var now = DateTime.UtcNow;
-        var key = Key(station.Callsign, station.Band);
-        _cache[key] = new Entry(station.Grid, now);
-        _evictionQueue.Enqueue(key, now);
-    }
-
-    public void MaybeEvict()
-    {
-        _flushCount++;
-
-        if (_flushCount % 50 != 0 || _cache.Count == 0)
-            return;
-
-        LazyEvict();
-    }
-
-    private void LazyEvict()
-    {
-        var now = DateTime.UtcNow;
-        var cutoff = now - EntryTtl;
-
-        while (_evictionQueue.TryPeek(out var key, out var timestamp))
+        while (true)
         {
-            if (_cache.TryGetValue(key, out var entry) && entry.LastDbWrite == timestamp)
+            if (!bandDict.TryGetValue(callsign, out var existing))
             {
-                if (entry.LastDbWrite >= cutoff && _cache.Count <= MaxSize)
-                    break;
-
-                _cache.Remove(key);
+                if (bandDict.TryAdd(callsign, new Entry(grid, lastHeard)))
+                    return true;
+                continue;
             }
 
-            _evictionQueue.Dequeue();
+            if (lastHeard <= existing.LastHeard)
+                return false; // out-of-order/stale report
+
+            var needsWrite = existing.Grid != grid;
+            if (bandDict.TryUpdate(callsign, new Entry(grid, lastHeard), existing))
+                return needsWrite;
         }
+    }
+
+    public void Seed(string callsign, string band, ushort grid, uint lastHeard)
+    {
+        var bandDict = _byBand.GetOrAdd(band, _ => new ConcurrentDictionary<string, Entry>());
+        var entry = new Entry(grid, lastHeard);
+
+        bandDict.AddOrUpdate(callsign,
+            entry,
+            (_, existing) => existing.LastHeard >= entry.LastHeard ? existing : entry);
+    }
+
+    public IEnumerable<(string Callsign, string Band, ushort Grid, uint LastHeard)> GetQuiet(uint cutoff)
+    {
+        foreach (var (band, bandDict) in _byBand)
+        {
+            foreach (var (callsign, entry) in bandDict)
+            {
+                if (entry.LastHeard <= cutoff)
+                    yield return (callsign, band, entry.Grid, entry.LastHeard);
+            }
+        }
+    }
+
+    public Dictionary<string, long> GetCountByBand()
+    {
+        var counts = new Dictionary<string, long>(_byBand.Count);
+        foreach (var (band, bandDict) in _byBand)
+            counts[band] = bandDict.Count;
+        return counts;
+    }
+
+    public long CountActive(uint cutoff)
+    {
+        long total = 0;
+        foreach (var (_, bandDict) in _byBand)
+        {
+            foreach (var (_, entry) in bandDict)
+            {
+                if (entry.LastHeard >= cutoff)
+                    total++;
+            }
+        }
+        return total;
     }
 }

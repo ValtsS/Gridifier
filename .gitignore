@@ -10,6 +10,9 @@
 *.db
 *.db-shm
 *.db-wal
+*.db.bak
+*.db.bak.1
+*.db.corrupt-*
 
 # User-specific files
 *.rsuser
