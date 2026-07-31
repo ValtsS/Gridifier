@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Gridifier.Api.Endpoints;
 using Gridifier.Shared.Data;
 using Gridifier.Shared.Models;
 using Gridifier.Shared.Validation;
@@ -96,6 +97,7 @@ builder.Services.AddHostedService(sp => new StatsRefresher(
 var app = builder.Build();
 
 app.UseAuthorization();
+app.MapGet("/api/v1/grid/{band}/{*callsign}", GridEndpoint.Get);
 app.MapControllers();
 
 app.Run();

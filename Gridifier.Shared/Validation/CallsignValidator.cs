@@ -12,9 +12,15 @@ public static partial class CallsignValidator
         if (string.IsNullOrWhiteSpace(callsign))
             return string.Empty;
 
-        return callsign
-            .Trim()
-            .ToUpperInvariant();
+        callsign = callsign.Trim();
+
+        foreach (var c in callsign)
+        {
+            if (c is >= 'a' and <= 'z')
+                return callsign.ToUpperInvariant();
+        }
+
+        return callsign;
     }
 
     public static bool IsValid(string? callsign)

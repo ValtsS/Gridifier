@@ -14,6 +14,14 @@ public static partial class BandValidator
 
     public static string Normalize(string band)
     {
-        return band.Trim().ToLowerInvariant();
+        band = band.Trim();
+
+        foreach (var c in band)
+        {
+            if (c is >= 'A' and <= 'Z')
+                return band.ToLowerInvariant();
+        }
+
+        return band;
     }
 }

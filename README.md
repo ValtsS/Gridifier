@@ -18,7 +18,7 @@ MQTT (pskreporter.info:1883)
                   StationCache (source of truth, all in RAM)
                        │
                        ▼
-              StationsController (GET /api/v1/grid/{band}/{callsign})
+               GridEndpoint (GET /api/v1/grid/{band}/{callsign})
 ```
 
 - **PskReporterWorker** — connects to MQTT, subscribes to `pskr/filter/v2/+/...` (all bands), parses JSON messages; tracks connect/disconnect counts, timestamps, and disconnect reasons
@@ -28,7 +28,7 @@ MQTT (pskreporter.info:1883)
 - **DatabaseBackup / DatabaseBackupWorker** — periodic SQLite online-backup snapshots (`gridifier.db.bak`, keeping 1 previous generation) plus a checkpoint+snapshot on graceful shutdown; on startup a `PRAGMA quick_check` runs and the DB is restored from the latest snapshot if corrupt (corrupt file preserved as `*.corrupt-<ts>`, never silently destroyed)
 - **StationSweeper** — periodic sweep that flushes stations silent for longer than the sweep interval (guarded upsert makes already-persisted rows no-ops); chunked transactions keep DB write locks to milliseconds
 - **StatsRefresher** — periodically precomputes active-station count and per-band breakdown so the stats endpoint never scans the cache on request
-- **StationsController** — `GET /api/v1/grid/{band}/{*callsign}` returns `{ g, t }` (1-letter fields, unix timestamp), reads only from the cache
+- **GridEndpoint** — minimal-API `GET /api/v1/grid/{band}/{*callsign}` returns `{ g, t }` (1-letter fields, unix timestamp); writes the JSON body directly (bypasses MVC/serialization), reads only from the cache
 - **StatsController** — `GET /api/stats` returns uptime, MQTT status, message rate, dropped-message count, connect/disconnect history, write totals, cache/DB sizes, active-station count, per-band breakdown, and last sweep info; disabled by default (`Stats:Enabled`), serves precomputed values (no cache scans on request)
 - **StationRepository** — SQLite reads/writes; upserts are guarded with `WHERE excluded.last_update > stations.last_update`
 

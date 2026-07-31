@@ -9,7 +9,7 @@ Real-time PSK Reporter station grid locator tracker. Listens to the PSK Reporter
 **Core architecture: RAM is the source of truth; SQLite is a recovery log.**
 - All reads come from `StationCache` (per-band `ConcurrentDictionary`, 8-byte entries `(ushort Grid, uint LastHeard)`).
 - DB is loaded once at startup (`cache.Seed`) and written to via guarded upserts; never read on the request path.
-- `StationsController` reads only from the cache (no DB round-trips).
+- `GridEndpoint` (minimal API) reads only from the cache (no DB round-trips).
 
 ## Commands
 
@@ -18,7 +18,7 @@ Real-time PSK Reporter station grid locator tracker. Listens to the PSK Reporter
 
 ## Project layout
 
-- `Gridifier.Api` — ASP.NET Core host; `Program.cs` wires everything manually (no `Startup` class); controllers, workers, rate limiting
+- `Gridifier.Api` — ASP.NET Core host; `Program.cs` wires everything manually (no `Startup` class); minimal API endpoint + controllers, workers, rate limiting
 - `Gridifier.Worker` — class library: `StationCache`, `DatabaseWriter`, `StationSweeper`, `StatsRefresher`, `DatabaseBackupWorker`, `PskReporterWorker`, `PskMessageHandler`, `AppStats`
 - `Gridifier.Shared` — models (`Station`, `MqttSettings`), data (`DatabaseInitializer`, `StationRepository`, `DbConnectionFactory`, `DatabaseBackup`), validation (`CallsignValidator`, `BandValidator`, `GridValidator`, `GridCodec`)
 - `Gridifier.Tests` — xUnit; repo tests use temp-file SQLite DBs; API tests use `WebApplicationFactory<Program>`
@@ -32,7 +32,7 @@ MQTT → PskReporterWorker → Channel<Station> → DatabaseWriter → guarded u
                         StationCache   StationSweeper (periodic quiet flush)
                              │
                              ▼
-                    StationsController (cache-only reads)
+                    GridEndpoint (cache-only reads)
 ```
 
 ## Key conventions and gotchas
@@ -52,6 +52,9 @@ MQTT → PskReporterWorker → Channel<Station> → DatabaseWriter → guarded u
 
 - `GET /api/v1/grid/{band}/{*callsign}` → `{ g, t }` (grid, unix seconds) or 400/404. `{*callsign}` catch-all handles `/` in callsigns like `OH1AA/MM`.
 - `GET /api/stats` → operational stats incl. connect/disconnect history; disabled by default (`Stats:Enabled`).
+- **Grid response bypasses JSON serialization entirely**: `GridEndpoint` (minimal API, `Gridifier.Api/Endpoints`) returns `Results.Text($"{{\"g\":\"{grid}\",\"t\":{lastHeard}}}", "application/json")` — no `JsonSerializer`, no source-gen context. The grid is a fixed-format 4-char code and `t` a `uint`, so the interpolation is safe (no escaping needed). Keep the hot endpoint on the minimal API path; do NOT move it back to an MVC controller. `GridifierJsonContext`/`GridResponse` were removed as dead code.
+- **Stats stays on MVC** (`StatsController`): `/api/stats` uses an anonymous type serialized via the default reflection-based JSON (not the hot path; `AddControllers()` is left unconfigured).
+- **`.NET 10 gotcha`: `ControllerBase.Json(...)` does not exist** (removed in .NET 10 — it only lives on `Controller`). Use `Ok(model)`/`BadRequest(...)` etc.; `JsonResult(object, object)`'s 2nd arg is Newtonsoft `JsonSerializerSettings`, NOT `JsonSerializerContext` (passing a context throws `InvalidOperationException` at execution).
 
 ## Config (`Gridifier.Api/appsettings.json`)
 
