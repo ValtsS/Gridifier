@@ -7,15 +7,22 @@ namespace Gridifier.Worker;
 public class PskReporterWorker(
     ILogger<PskReporterWorker> logger,
     Channel<Station> stationChannel,
-    MqttSettings settings,
-    AppStats stats)
+    AppStats stats,
+    int subscriptionIndex,
+    string host,
+    int port,
+    string topic)
     : BackgroundService
 {
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan KeepaliveLog = TimeSpan.FromMinutes(5);
     private readonly MqttClientOptions _connOptions = new MqttClientOptionsBuilder()
-        .WithTcpServer(settings.Host, settings.Port)
+        .WithTcpServer(host, port)
         .Build();
+
+    private readonly string _host = host;
+    private readonly int _port = port;
+    private readonly string _topic = topic;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -46,33 +53,30 @@ public class PskReporterWorker(
 
         client.DisconnectedAsync += args =>
         {
-            stats.MqttConnected = false;
+            stats.SetSubscriptionConnected(subscriptionIndex, connected: false);
             stats.IncrementDisconnects();
             stats.LastDisconnectAt = DateTime.UtcNow;
             stats.LastDisconnectReason = args.Reason.ToString();
-            stats.MessagesPerSecond = 0;
-            logger.LogWarning("Disconnected (reason: {Reason}), will reconnect", args.Reason);
+            logger.LogWarning("Disconnected ({Topic}, reason: {Reason}), will reconnect", _topic, args.Reason);
             return Task.CompletedTask;
         };
 
-        logger.LogInformation("Connecting to {Host}:{Port}", settings.Host, settings.Port);
+        logger.LogInformation("Connecting to {Host}:{Port} for {Topic}", _host, _port, _topic);
         await client.ConnectAsync(_connOptions, stoppingToken);
-        stats.MqttConnected = true;
+        stats.SetSubscriptionConnected(subscriptionIndex, connected: true, topic: _topic);
         stats.IncrementConnects();
         stats.LastConnectAt = DateTime.UtcNow;
-        logger.LogInformation("Connected");
+        logger.LogInformation("Connected for {Topic}", _topic);
 
         var subscribeOptions = new MqttClientSubscribeOptionsBuilder()
-            .WithTopicFilter(settings.Topic)
+            .WithTopicFilter(_topic)
             .Build();
 
         await client.SubscribeAsync(subscribeOptions, stoppingToken);
-        logger.LogInformation("Subscribed to {Topic}", settings.Topic);
+        logger.LogInformation("Subscribed to {Topic}", _topic);
 
         var handler = new PskMessageHandler(stationChannel, stats);
         var lastKeepalive = DateTime.UtcNow;
-        var lastRateAt = DateTime.UtcNow;
-        var lastRateCount = 0L;
 
         client.ApplicationMessageReceivedAsync += args =>
         {
@@ -95,23 +99,18 @@ public class PskReporterWorker(
             await Task.Delay(1000, stoppingToken);
 
             var now = DateTime.UtcNow;
-            var elapsed = now - lastRateAt;
-            if (elapsed >= TimeSpan.FromSeconds(1))
-            {
-                stats.MessagesPerSecond = (stats.TotalMessagesReceived - lastRateCount) / elapsed.TotalSeconds;
-                lastRateCount = stats.TotalMessagesReceived;
-                lastRateAt = now;
-            }
 
             if (now - lastKeepalive >= KeepaliveLog)
             {
-                logger.LogInformation("Still listening - received {Total} messages so far", stats.TotalMessagesReceived);
+                logger.LogInformation(
+                    "Still listening ({Topic}) - received {Total} messages so far",
+                    _topic, stats.TotalMessagesReceived);
                 lastKeepalive = now;
             }
 
             if (!client.IsConnected)
             {
-                logger.LogWarning("MQTT client disconnected, exiting session to reconnect");
+                logger.LogWarning("MQTT client disconnected ({Topic}), exiting session to reconnect", _topic);
                 break;
             }
         }

@@ -21,7 +21,7 @@ MQTT (pskreporter.info:1883)
                GridEndpoint (GET /api/v1/grid/{band}/{callsign})
 ```
 
-- **PskReporterWorker** — connects to MQTT, subscribes to `pskr/filter/v2/+/...` (all bands), parses JSON messages; tracks connect/disconnect counts, timestamps, and disconnect reasons
+- **PskReporterWorker** — one per MQTT subscription: connects, subscribes to its topic (default `pskr/filter/v2/+/...` all bands, or per-band like `pskr/filter/v2/20m/#`), parses JSON messages, tracks per-subscription connect/disconnect status
 - **PskMessageHandler** — extracts `rc`/`rl` (receiver) and `sc`/`sl` (sender) pairs along with `b` (band), validates, truncates grids to 4 chars, writes to channel
 - **DatabaseWriter** — reads from channel, updates `StationCache` (per-band dictionaries, 8-byte entries: grid encoded as `ushort`, last heard as `uint` unix seconds); persists immediately only for new stations or grid changes, in batches
 - **StationCache** — source of truth held entirely in RAM; loaded once from SQLite at startup, then served directly by the API with no DB round-trips
@@ -76,7 +76,9 @@ curl http://localhost:5027/api/stats   # set Stats:Enabled=true to enable
   "Mqtt": {
     "Host": "mqtt.pskreporter.info",
     "Port": 1883,
-    "Topic": "pskr/filter/v2/+/+/+/+/+/+/+/+"
+    "Subscriptions": [
+      { "Topic": "pskr/filter/v2/+/+/+/+/+/+/+/+" }
+    ]
   },
   "Cache": {
     "SweepIntervalMinutes": 5
@@ -96,9 +98,12 @@ curl http://localhost:5027/api/stats   # set Stats:Enabled=true to enable
 Override via environment variables:
 
 ```bash
-set Mqtt__Host=other.broker.com
+set Mqtt__Subscriptions__0__Topic="pskr/filter/v2/20m/#"
+set Mqtt__Subscriptions__1__Topic="pskr/filter/v2/40m/#"
 set ConnectionStrings__Gridifier="Data Source=/data/gridifier.db"
 ```
+
+`Mqtt:Subscriptions` is a list of connections, each with its own topic filter (inheriting `Host`/`Port` unless overridden per entry). Leave it empty to subscribe to all bands; use per-band topics like `pskr/filter/v2/20m/#` to split traffic across separate connections.
 
 ## Docker
 

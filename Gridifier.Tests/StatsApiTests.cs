@@ -37,6 +37,8 @@ public class StatsApiTests
         Assert.Contains("activeStations", body.Keys);
         Assert.Contains("stationsByBand", body.Keys);
         Assert.Contains("droppedMessages", body.Keys);
+        Assert.Contains("connectedSubscriptions", body.Keys);
+        Assert.Contains("subscriptions", body.Keys);
     }
 
     [Fact]

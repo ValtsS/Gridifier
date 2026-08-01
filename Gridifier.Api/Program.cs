@@ -15,6 +15,8 @@ var connString = builder.Configuration.GetConnectionString("Gridifier")
 var mqttSettings = builder.Configuration.GetSection("Mqtt").Get<MqttSettings>()
                    ?? new MqttSettings();
 
+var subscriptions = mqttSettings.GetSubscriptions().ToList();
+
 var dbPath = DatabaseBackup.GetPath(connString);
 
 using var startupServices = builder.Services.BuildServiceProvider();
@@ -66,12 +68,24 @@ foreach (var station in stationRepository.GetAll())
 builder.Services.AddSingleton(dbFactory);
 builder.Services.AddSingleton<StationRepository>();
 builder.Services.AddSingleton(stationCache);
-var appStats = new AppStats();
+var appStats = new AppStats(subscriptions.Count);
 appStats.DatabaseCount = stationRepository.Count();
 builder.Services.AddSingleton(appStats);
 builder.Services.AddSingleton(mqttSettings);
 builder.Services.AddSingleton(stationChannel);
-builder.Services.AddHostedService<PskReporterWorker>();
+for (var i = 0; i < subscriptions.Count; i++)
+{
+    var index = i;
+    var sub = subscriptions[i];
+    builder.Services.AddHostedService(sp => new PskReporterWorker(
+        sp.GetRequiredService<ILogger<PskReporterWorker>>(),
+        stationChannel,
+        appStats,
+        index,
+        sub.Host!,
+        sub.Port!.Value,
+        sub.Topic));
+}
 builder.Services.AddHostedService<DatabaseWriter>();
 
 var sweepInterval = TimeSpan.FromMinutes(

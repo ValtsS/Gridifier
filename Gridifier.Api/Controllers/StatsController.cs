@@ -17,6 +17,15 @@ public class StatsController(AppStats stats, IConfiguration config) : Controller
         {
             uptime = DateTime.UtcNow - stats.Uptime,
             mqttConnected = stats.MqttConnected,
+            connectedSubscriptions = stats.ConnectedSubscriptions,
+            subscriptions = stats.Subscriptions.Select(s => new
+            {
+                topic = s.Topic,
+                connected = s.Connected,
+                lastConnectAt = s.LastConnectAt,
+                lastDisconnectAt = s.LastDisconnectAt,
+                lastDisconnectReason = s.LastDisconnectReason
+            }),
             totalMessagesReceived = stats.TotalMessagesReceived,
             messagesPerSecond = Math.Round(stats.MessagesPerSecond, 1),
             droppedMessages = stats.DroppedMessages,
