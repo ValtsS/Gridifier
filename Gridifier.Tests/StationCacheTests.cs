@@ -158,6 +158,51 @@ public class StationCacheTests
     }
 
     [Fact]
+    public void GetQuiet_excludes_persisted_entries()
+    {
+        var cache = new StationCache();
+        cache.TryUpdate("QUIET", "15m", Grid("JO20AA"), 50);
+        cache.MarkPersisted("QUIET", "15m", lastHeard: 50);
+
+        Assert.Empty(cache.GetQuiet(cutoff: 100));
+    }
+
+    [Fact]
+    public void MarkPersisted_does_not_clear_newer_report()
+    {
+        var cache = new StationCache();
+        cache.TryUpdate("QUIET", "15m", Grid("JO20AA"), 50);
+        cache.TryUpdate("QUIET", "15m", Grid("JO20AA"), 60);
+        cache.MarkPersisted("QUIET", "15m", lastHeard: 50);
+
+        var quiet = cache.GetQuiet(cutoff: 100).ToList();
+        Assert.Single(quiet);
+        Assert.Equal(60u, quiet[0].LastHeard);
+    }
+
+    [Fact]
+    public void MarkPersisted_then_new_report_goes_dirty_again()
+    {
+        var cache = new StationCache();
+        cache.TryUpdate("QUIET", "15m", Grid("JO20AA"), 50);
+        cache.MarkPersisted("QUIET", "15m", lastHeard: 50);
+        cache.TryUpdate("QUIET", "15m", Grid("JO20AA"), 70);
+
+        var quiet = cache.GetQuiet(cutoff: 100).ToList();
+        Assert.Single(quiet);
+        Assert.Equal(70u, quiet[0].LastHeard);
+    }
+
+    [Fact]
+    public void Seed_entries_are_not_dirty()
+    {
+        var cache = new StationCache();
+        cache.Seed("SEEDED", "15m", Grid("JO20AA"), 50);
+
+        Assert.Empty(cache.GetQuiet(cutoff: 100));
+    }
+
+    [Fact]
     public void GetCountByBand_groups_counts()
     {
         var cache = new StationCache();

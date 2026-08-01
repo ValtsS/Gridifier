@@ -54,7 +54,7 @@ public class StationSweeper(
 
             if (chunk.Count >= ChunkSize)
             {
-                repo.UpsertMany(chunk);
+                Persist(chunk);
                 written += chunk.Count;
                 chunk.Clear();
             }
@@ -62,7 +62,7 @@ public class StationSweeper(
 
         if (chunk.Count > 0)
         {
-            repo.UpsertMany(chunk);
+            Persist(chunk);
             written += chunk.Count;
         }
 
@@ -72,5 +72,13 @@ public class StationSweeper(
         stats.LastSweepAt = DateTime.UtcNow;
         stats.LastSweepPersisted = written;
         stats.DatabaseCount = repo.Count();
+    }
+
+    private void Persist(List<Station> chunk)
+    {
+        repo.UpsertMany(chunk);
+
+        foreach (var station in chunk)
+            cache.MarkPersisted(station.Callsign, station.Band, (uint)station.LastUpdate);
     }
 }

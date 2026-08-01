@@ -49,6 +49,8 @@ public class DatabaseWriter(
                 try
                 {
                     repo.UpsertMany(batch);
+                    foreach (var station in batch)
+                        cache.MarkPersisted(station.Callsign, station.Band, (uint)station.LastUpdate);
                     totalWritten += batch.Count;
                 }
                 catch (Exception ex)
@@ -96,6 +98,8 @@ public class DatabaseWriter(
             try
             {
                 repo.UpsertMany(batch);
+                foreach (var station in batch)
+                    cache.MarkPersisted(station.Callsign, station.Band, (uint)station.LastUpdate);
                 totalWritten += batch.Count;
                 logger.LogInformation("Final flush: {Count} stations (total {Total})", batch.Count, totalWritten);
             }
