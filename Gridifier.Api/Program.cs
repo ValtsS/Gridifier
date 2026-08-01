@@ -19,8 +19,8 @@ var subscriptions = mqttSettings.GetSubscriptions().ToList();
 
 var dbPath = DatabaseBackup.GetPath(connString);
 
-using var startupServices = builder.Services.BuildServiceProvider();
-var startupLogger = startupServices.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+using var startupLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
+var startupLogger = startupLoggerFactory.CreateLogger("Startup");
 
 if (!DatabaseBackup.IsHealthy(dbPath))
 {
@@ -77,7 +77,10 @@ for (var i = 0; i < subscriptions.Count; i++)
 {
     var index = i;
     var sub = subscriptions[i];
-    builder.Services.AddHostedService(sp => new PskReporterWorker(
+    // NOTE: register as IHostedService directly (not AddHostedService<T>) —
+    // AddHostedService<T> deduplicates registrations by type, so a second
+    // PskReporterWorker would silently never start.
+    builder.Services.AddSingleton<IHostedService>(sp => new PskReporterWorker(
         sp.GetRequiredService<ILogger<PskReporterWorker>>(),
         stationChannel,
         appStats,
