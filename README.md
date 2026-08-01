@@ -52,6 +52,22 @@ GET /api/v1/grid/{band}/{callsign}
 GET /api/stats
 ```
 
+### Grid response
+
+`GET /api/v1/grid/{band}/{callsign}` returns the last heard grid for a station:
+
+```json
+{ "g": "KP30", "t": 1750000000 }
+```
+
+- `g` — 4-char Maidenhead grid locator (uppercase)
+- `t` — last heard, unix seconds (UTC)
+- `200` with the body above when the station is in the cache
+- `400` with a text body (`Invalid band` / `Invalid callsign`) for invalid input
+- `404` with an empty body when the callsign is unknown
+
+`{*callsign}` catch-all handles `/` in callsigns like `OH1AA/MM`.
+
 ### Examples
 
 ```bash
