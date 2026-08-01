@@ -154,3 +154,7 @@ set ASPNETCORE_URLS=http://0.0.0.0:8080 && start /B Gridifier.Api.exe
 ```bash
 dotnet test
 ```
+
+## License
+
+BSD 3-Clause — see [LICENSE](LICENSE).
