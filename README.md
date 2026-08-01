@@ -26,7 +26,7 @@ MQTT (pskreporter.info:1883)
 - **DatabaseWriter** — reads from channel, updates `StationCache` (per-band dictionaries, 8-byte entries: grid encoded as `ushort`, last heard as `uint` unix seconds); persists immediately only for new stations or grid changes, in batches
 - **StationCache** — source of truth held entirely in RAM; loaded once from SQLite at startup, then served directly by the API with no DB round-trips
 - **DatabaseBackup / DatabaseBackupWorker** — periodic SQLite online-backup snapshots (`gridifier.db.bak`, keeping 1 previous generation) plus a checkpoint+snapshot on graceful shutdown; on startup a `PRAGMA quick_check` runs and the DB is restored from the latest snapshot if corrupt (corrupt file preserved as `*.corrupt-<ts>`, never silently destroyed)
-- **StationSweeper** — periodic sweep that flushes stations silent for longer than the sweep interval (guarded upsert makes already-persisted rows no-ops); chunked transactions keep DB write locks to milliseconds
+- **StationSweeper** — periodic sweep that flushes only *dirty* stations silent for longer than the sweep interval (repeat same-grid reports are not written eagerly; guarded upsert makes already-persisted rows no-ops); chunked transactions keep DB write locks to milliseconds
 - **StatsRefresher** — periodically precomputes active-station count and per-band breakdown so the stats endpoint never scans the cache on request
 - **GridEndpoint** — minimal-API `GET /api/v1/grid/{band}/{*callsign}` returns `{ g, t }` (1-letter fields, unix timestamp); writes the JSON body directly (bypasses MVC/serialization), reads only from the cache
 - **StatsController** — `GET /api/stats` returns uptime, MQTT status, message rate, dropped-message count, connect/disconnect history, write totals, cache/DB sizes, active-station count, per-band breakdown, and last sweep info; disabled by default (`Stats:Enabled`), serves precomputed values (no cache scans on request)
@@ -109,8 +109,10 @@ set ConnectionStrings__Gridifier="Data Source=/data/gridifier.db"
 
 ```bash
 docker build -t gridifier .
-docker run -v gridifier-data:/data -p 8080:80 gridifier
+docker run --env-file .gridifier.env -v gridifier-data:/data -p 2080:2080 gridifier
 ```
+
+`.gridifier.env` sets the runtime config (connection string to `/data/gridifier.db`, MQTT subscriptions, and `ASPNETCORE_URLS=http://+:2080`). The Dockerfile defaults the DB to `/data/gridifier.db` and runs as a non-root user.
 
 ## Publish (self-contained, no runtime needed)
 
