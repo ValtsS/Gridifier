@@ -81,13 +81,18 @@ for (var i = 0; i < subscriptions.Count; i++)
     // NOTE: register as IHostedService directly (not AddHostedService<T>) —
     // AddHostedService<T> deduplicates registrations by type, so a second
     // PskReporterWorker would silently never start.
-    builder.Services.AddSingleton<IHostedService>(sp => new PskReporterWorker(
-        sp.GetRequiredService<ILogger<PskReporterWorker>>(),
-        stationChannel,
-        appStats,
+    var connection = MqttConnectionFactory.Create(
         index,
         sub.Host!,
         sub.Port!.Value,
+        builder.Configuration.GetValue("Mqtt:Transport", "mqttnet"));
+    builder.Services.AddSingleton(connection);
+    builder.Services.AddSingleton<IHostedService>(sp => new PskReporterWorker(
+        sp.GetRequiredService<ILogger<PskReporterWorker>>(),
+        connection,
+        stationChannel,
+        appStats,
+        index,
         sub.Topic));
 }
 builder.Services.AddHostedService<DatabaseWriter>();
