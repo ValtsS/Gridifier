@@ -16,7 +16,11 @@ public class PskReporterWorker(
 {
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan KeepaliveLog = TimeSpan.FromMinutes(5);
+    // Unique per process (stable across reconnects); per-subscription suffix
+    // prevents session takeover between the N workers sharing the broker.
+    private static readonly string InstanceId = Guid.NewGuid().ToString("N")[..8];
     private readonly MqttClientOptions _connOptions = new MqttClientOptionsBuilder()
+        .WithClientId($"gridifier-{InstanceId}-{subscriptionIndex}")
         .WithTcpServer(host, port)
         .Build();
 
@@ -82,8 +86,18 @@ public class PskReporterWorker(
         {
             try
             {
-                var text = args.ApplicationMessage.ConvertPayloadToString();
-                handler.HandleMessage(text);
+                var payload = args.ApplicationMessage.Payload;
+                if (payload.IsSingleSegment)
+                {
+                    handler.HandleMessage(payload.FirstSpan);
+                }
+                else
+                {
+                    var bytes = new byte[payload.Length];
+                    var writer = new System.Buffers.SequenceReader<byte>(payload);
+                    writer.TryCopyTo(bytes);
+                    handler.HandleMessage(bytes);
+                }
                 stats.IncrementMessages();
             }
             catch (Exception ex)

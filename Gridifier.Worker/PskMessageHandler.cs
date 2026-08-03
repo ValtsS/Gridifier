@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Gridifier.Shared.Models;
@@ -24,52 +25,75 @@ public class PskMessageHandler
     }
 
     public void HandleMessage(string payload)
+        => HandleMessage(Encoding.UTF8.GetBytes(payload));
+
+    public void HandleMessage(ReadOnlySpan<byte> payload)
     {
-        JsonDocument doc;
+        var reader = new Utf8JsonReader(payload);
+        string? receiver = null;
+        string? receiverGrid = null;
+        string? sender = null;
+        string? senderGrid = null;
+        string? band = null;
+
         try
         {
-            doc = JsonDocument.Parse(payload);
+            // Streaming scan, no JsonDocument DOM allocation. Only the fields we
+            // need are read; everything else (sq, f, md, rp, sa, ...) is skipped.
+            while (reader.Read())
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                    continue;
+
+                var prop = reader.ValueSpan;
+                if (!reader.Read())
+                    break;
+
+                if (prop.Length == 1 && prop[0] == (byte)'b')
+                {
+                    band = reader.GetString();
+                }
+                else if (prop.Length == 2 && prop[0] == (byte)'r')
+                {
+                    if (prop[1] == (byte)'c') receiver = reader.GetString();
+                    else if (prop[1] == (byte)'l') receiverGrid = reader.GetString();
+                }
+                else if (prop.Length == 2 && prop[0] == (byte)'s')
+                {
+                    if (prop[1] == (byte)'c') sender = reader.GetString();
+                    else if (prop[1] == (byte)'l') senderGrid = reader.GetString();
+                }
+            }
         }
         catch (JsonException)
         {
             return;
         }
 
-        using (doc)
-        {
-            var root = doc.RootElement;
+        if (band is null)
+            return;
 
-            var band = root.TryGetProperty("b", out var bEl)
-                ? BandValidator.Normalize(bEl.GetString() ?? "")
-                : "";
+        band = BandValidator.Normalize(band);
+        if (!BandValidator.IsValid(band))
+            return;
 
-            if (!BandValidator.IsValid(band))
-                return;
+        if (receiver is not null)
+            TryQueue(receiver, receiverGrid, band);
 
-            if (root.TryGetProperty("rc", out var rcEl))
-                TryQueue(rcEl, root, "rl", band);
-
-            if (root.TryGetProperty("sc", out var scEl))
-                TryQueue(scEl, root, "sl", band);
-        }
+        if (sender is not null)
+            TryQueue(sender, senderGrid, band);
     }
 
-    private void TryQueue(JsonElement callsignEl, JsonElement root, string gridKey, string band)
+    private void TryQueue(string callsign, string? grid, string band)
     {
-        var callsign = callsignEl.GetString();
-        if (string.IsNullOrWhiteSpace(callsign))
-            return;
-
         callsign = CallsignValidator.Normalize(callsign);
-
-        var grid = root.TryGetProperty(gridKey, out var gridEl)
-            ? GridValidator.Normalize(gridEl.GetString() ?? "")
-            : "";
-
-        if (!GridValidator.IsValid(grid))
+        if (callsign.Length == 0)
             return;
 
-        grid = GridValidator.Shorten(grid);
+        if (grid is null || !GridValidator.IsValid(grid))
+            return;
+
+        grid = GridValidator.Shorten(GridValidator.Normalize(grid));
 
         if (_stationChannel.Reader.CanCount && _stationChannel.Reader.Count >= _channelCapacity)
             _stats.IncrementDropped();
