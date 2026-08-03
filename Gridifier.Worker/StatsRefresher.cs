@@ -37,6 +37,8 @@ public class StatsRefresher(
         stats.StationsByBand = cache.GetCountByBand();
         stats.CacheSize = (int)cache.Count;
 
+        stats.RefreshProcessDiagnostics();
+
         var current = stats.TotalMessagesReceived;
         stats.MessagesPerSecond = (current - _lastMessageCount) / interval.TotalSeconds;
         _lastMessageCount = current;

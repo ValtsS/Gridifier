@@ -70,6 +70,7 @@ builder.Services.AddSingleton<StationRepository>();
 builder.Services.AddSingleton(stationCache);
 var appStats = new AppStats(subscriptions.Count);
 appStats.DatabaseCount = stationRepository.Count();
+appStats.InitializeProcessDiagnostics();
 builder.Services.AddSingleton(appStats);
 builder.Services.AddSingleton(mqttSettings);
 builder.Services.AddSingleton(stationChannel);

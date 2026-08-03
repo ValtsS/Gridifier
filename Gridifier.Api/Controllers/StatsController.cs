@@ -40,7 +40,12 @@ public class StatsController(AppStats stats, IConfiguration config) : Controller
             lastDisconnectAt = stats.LastDisconnectAt,
             lastDisconnectReason = stats.LastDisconnectReason,
             lastSweepAt = stats.LastSweepAt,
-            lastSweepPersisted = stats.LastSweepPersisted
+            lastSweepPersisted = stats.LastSweepPersisted,
+            uptimeSeconds = Math.Round((DateTime.UtcNow - stats.Uptime).TotalSeconds, 1),
+            cpuSeconds = Math.Round(stats.CpuSeconds, 2),
+            cpuPercent = Math.Round(stats.CpuSeconds / (DateTime.UtcNow - stats.Uptime).TotalSeconds * 100, 1),
+            allocatedBytes = stats.AllocatedBytes,
+            allocatedMB = Math.Round(stats.AllocatedBytes / 1024.0 / 1024.0, 1)
         });
     }
 }

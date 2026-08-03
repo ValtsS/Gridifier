@@ -4,6 +4,38 @@ public class AppStats
 {
     public bool MqttConnected => ConnectedSubscriptions > 0;
     public long TotalMessagesReceived => _messagesReceived;
+
+    // Live diagnostics, populated by StatsRefresher: accumulate elapsed CPU time
+    // (all threads, across cores) and bytes allocated since app start so
+    // /api/stats reports genuine utilization without external tools.
+    public double CpuSeconds { get; private set; }
+    public long AllocatedBytes { get; private set; }
+    private TimeSpan _lastCpu;
+    private long _lastAlloc;
+    private long _startAlloc;
+
+    public void InitializeProcessDiagnostics()
+    {
+        var process = System.Diagnostics.Process.GetCurrentProcess();
+        _lastCpu = process.TotalProcessorTime;
+        _lastAlloc = GC.GetTotalAllocatedBytes(precise: false);
+        _startAlloc = _lastAlloc;
+    }
+
+    public void RefreshProcessDiagnostics()
+    {
+        var process = System.Diagnostics.Process.GetCurrentProcess();
+        var cpu = process.TotalProcessorTime;
+        var alloc = GC.GetTotalAllocatedBytes(precise: false);
+
+        lock (_diagLock)
+        {
+            CpuSeconds += Math.Max(0, (cpu - _lastCpu).TotalSeconds);
+            AllocatedBytes += Math.Max(0, alloc - _lastAlloc);
+            _lastCpu = cpu;
+            _lastAlloc = alloc;
+        }
+    }
     public long TotalWritten { get; set; }
     public int CacheSize { get; set; }
     public long DatabaseCount { get; set; }
@@ -32,6 +64,7 @@ public class AppStats
     private long _connects;
     private long _disconnects;
     private int _connectedSubscriptions;
+    private readonly object _diagLock = new();
 
     public AppStats(int subscriptionCount = 0)
     {
