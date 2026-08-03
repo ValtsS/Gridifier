@@ -25,6 +25,7 @@ public static class MqttConnectionFactory
         return transport switch
         {
             "mqttnet" => new MqttnetConnection(clientId, host, port),
+            "pulse" => new PulseMqttConnection(clientId, host, port),
             _ => throw new ArgumentOutOfRangeException(nameof(transport),
                 $"Unknown MQTT transport '{transport}'")
         };
