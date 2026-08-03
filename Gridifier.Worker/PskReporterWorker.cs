@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using Gridifier.Shared.Models;
 using MQTTnet;
@@ -86,6 +87,7 @@ public class PskReporterWorker(
         {
             try
             {
+                var sw = Stopwatch.GetTimestamp();
                 var payload = args.ApplicationMessage.Payload;
                 if (payload.IsSingleSegment)
                 {
@@ -99,6 +101,8 @@ public class PskReporterWorker(
                     handler.HandleMessage(bytes);
                 }
                 stats.IncrementMessages();
+                stats.RecordHandlerTime(
+                    (Stopwatch.GetTimestamp() - sw) * 1_000_000_000L / Stopwatch.Frequency);
             }
             catch (Exception ex)
             {

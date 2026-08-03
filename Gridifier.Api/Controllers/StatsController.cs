@@ -45,7 +45,11 @@ public class StatsController(AppStats stats, IConfiguration config) : Controller
             cpuSeconds = Math.Round(stats.CpuSeconds, 2),
             cpuPercent = Math.Round(stats.CpuSeconds / (DateTime.UtcNow - stats.Uptime).TotalSeconds * 100, 1),
             allocatedBytes = stats.AllocatedBytes,
-            allocatedMB = Math.Round(stats.AllocatedBytes / 1024.0 / 1024.0, 1)
+            allocatedMB = Math.Round(stats.AllocatedBytes / 1024.0 / 1024.0, 1),
+            handlerMessages = stats.HandlerMessages,
+            avgHandlerMicroseconds = stats.HandlerMessages > 0
+                ? Math.Round(stats.HandlerNanoseconds / 1000.0 / stats.HandlerMessages, 2)
+                : 0
         });
     }
 }

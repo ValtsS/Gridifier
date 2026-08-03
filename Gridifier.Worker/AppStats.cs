@@ -66,6 +66,18 @@ public class AppStats
     private int _connectedSubscriptions;
     private readonly object _diagLock = new();
 
+    // Handler-side latency (ns summed via Stopwatch across all messages). Dividing
+    // total by TotalMessagesReceived gives avg handler time/message, which lets us
+    // subtract our parse cost from total CPU to infer MQTTnet's receive share.
+    public long HandlerNanoseconds { get; private set; }
+    public long HandlerMessages { get; private set; }
+
+    public void RecordHandlerTime(long nanoseconds)
+    {
+        HandlerNanoseconds += nanoseconds;
+        HandlerMessages++;
+    }
+
     public AppStats(int subscriptionCount = 0)
     {
         Subscriptions = new SubscriptionStatus[subscriptionCount];
