@@ -85,7 +85,7 @@ for (var i = 0; i < subscriptions.Count; i++)
         index,
         sub.Host!,
         sub.Port!.Value,
-        builder.Configuration.GetValue("Mqtt:Transport", "mqttnet"));
+        builder.Configuration.GetValue("Mqtt:Transport", "pulse"));
     builder.Services.AddSingleton(connection);
     builder.Services.AddSingleton<IHostedService>(sp => new PskReporterWorker(
         sp.GetRequiredService<ILogger<PskReporterWorker>>(),
