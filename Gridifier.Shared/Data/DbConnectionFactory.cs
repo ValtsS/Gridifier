@@ -15,6 +15,18 @@ public class DbConnectionFactory(string connectionString)
         walCmd.CommandText = "PRAGMA journal_mode=WAL;";
         walCmd.ExecuteNonQuery();
 
+        // synchronous=FULL (default) fsyncs on every commit. NORMAL only syncs
+        // the WAL at checkpoint, which is safe here: RAM is the source of truth,
+        // SQLite is just a recovery log, so a crash may lose recent commits but
+        // never corrupt. Big win on slow (J1900/eMMC) disks.
+        using var syncCmd = connection.CreateCommand();
+        syncCmd.CommandText = "PRAGMA synchronous=NORMAL;";
+        syncCmd.ExecuteNonQuery();
+
+        using var busyCmd = connection.CreateCommand();
+        busyCmd.CommandText = "PRAGMA busy_timeout=10000;";
+        busyCmd.ExecuteNonQuery();
+
         return connection;
     }
 }
